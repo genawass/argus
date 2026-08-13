@@ -1,8 +1,10 @@
 """Database backups.
 
-The entire task history is one SQLite file on NFS. NFS is redundancy, not a
-backup: an accidental delete, a bad migration or corruption loses everything
-and there is no second copy. This makes one, consistently.
+The entire task history is one SQLite file on one host's local disk. That is
+the deliberate trade for safe writes -- but it means this file is the only
+copy, and the disk under it is the only redundancy. A backup that lands on the
+same disk protects against a bad migration and nothing else, so `backup_dir`
+should name another filesystem (README: Backups and recovery).
 
 `sqlite3.Connection.backup` is used rather than copying the file, because a
 plain copy of a live WAL database can capture a torn state.
@@ -15,7 +17,7 @@ from .clock import utcnow
 
 
 def default_dir(config):
-    return config.data_dir / "backups"
+    return config.backup_path
 
 
 def run(config, dest=None, keep=14):

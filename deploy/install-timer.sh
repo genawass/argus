@@ -7,8 +7,15 @@ set -eu
 ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 
+# Same resolution the entrypoints use, so units and shells agree on which
+# database is "the" database. Only matters when TAM_HOME is not already set.
+if [ -r "${TAM_ENV:-$ROOT/.tam-env}" ]; then
+    . "${TAM_ENV:-$ROOT/.tam-env}"
+fi
+
 mkdir -p "$UNIT_DIR"
-for unit in tam-digest.service tam-digest.timer \
+for unit in tam-api.service \
+            tam-digest.service tam-digest.timer \
             tam-scan.service tam-scan.timer \
             tam-backup.service tam-backup.timer; do
     sed -e "s|__TAM_ROOT__|$ROOT|g" -e "s|__TAM_HOME__|${TAM_HOME:-$ROOT}|g" "$ROOT/deploy/$unit" > "$UNIT_DIR/$unit"
@@ -16,6 +23,10 @@ for unit in tam-digest.service tam-digest.timer \
 done
 
 systemctl --user daemon-reload
+# The API first: the timers write through the same database file, but a node
+# that wakes up mid-install should find the service, not a connection refused.
+systemctl --user enable --now tam-api.service
+systemctl --user restart tam-api.service
 for t in tam-digest.timer tam-scan.timer tam-backup.timer; do
     systemctl --user enable --now "$t"
 done

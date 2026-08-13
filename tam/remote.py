@@ -1,10 +1,11 @@
 """Remote service: the same surface as `core.Service`, spoken over HTTP.
 
-Why this exists: the database lives on shared storage but only one host may
-open the file (see README, "Cluster access"). Every other node therefore has to
-go through the API. Rather than write a second client with its own idea of what
-a command means, this presents the identical method surface, so `cli.py` works
-against a remote database with no changes and no branching.
+Why this exists: the database is one file on one host's local disk, because only
+one host may open a SQLite file safely (see README, "Cluster access"). Every
+other node therefore has to go through the API. Rather than write a second
+client with its own idea of what a command means, this presents the identical
+method surface, so `cli.py` works against a remote database with no changes and
+no branching.
 
 It holds no rules. Validation, the workflow matrix and the guards all still
 happen on the server; this only ferries arguments and rebuilds the records.

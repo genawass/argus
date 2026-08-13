@@ -469,3 +469,62 @@ class TestParity(CliMixin, HttpMixin, McpMixin, TamTestCase):
         shown = self.run_json("issue", "show", key, "--comments")["data"]
         self.assertEqual([c["body"] for c in shown["comments"]],
                          ["from http", "from mcp"])
+
+
+class TestDocsEndpoint(HttpMixin, TamTestCase):
+    """`docs/*.md` is served to nodes instead of being copied to shared storage.
+
+    The point of the endpoint is that an agent's instructions and the API that
+    enforces them cannot drift apart, so the tests that matter are: it serves
+    the real file, it needs the same token as everything else, and it cannot be
+    talked into leaving the docs directory.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.config.token_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config.token_path.write_text("test-token-abc123\n")
+        self.start_api()
+
+    def raw(self, path, token="valid"):
+        req = urllib.request.Request(self.base + path, method="GET")
+        if token == "valid" and self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, resp.headers.get("Content-Type"), resp.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.headers.get("Content-Type"), exc.read()
+
+    def test_index_lists_the_markdown_docs(self):
+        status, _, raw = self.raw("/docs")
+        self.assertEqual(status, 200)
+        names = json.loads(raw)["data"]
+        self.assertIn("ARGUS.md", names)
+        self.assertTrue(all(n.endswith(".md") for n in names))
+
+    def test_serves_the_file_from_the_checkout(self):
+        status, ctype, raw = self.raw("/docs/ARGUS.md")
+        self.assertEqual(status, 200)
+        self.assertIn("text/markdown", ctype)
+        self.assertEqual(raw, (api.DOCS_DIR / "ARGUS.md").read_bytes())
+
+    def test_requires_a_token_like_every_other_route(self):
+        status, _, raw = self.raw("/docs/ARGUS.md", token=None)
+        self.assertEqual(status, 401)
+        self.assertEqual(json.loads(raw)["error"]["code"], "unauthorized")
+
+    def test_refuses_to_escape_the_docs_directory(self):
+        for path in ("/docs/../.tam-env",
+                     "/docs/%2e%2e%2f.tam-env",
+                     "/docs/../tam/api.py",
+                     "/docs/subdir/../../README.md"):
+            with self.subTest(path=path):
+                status, _, _ = self.raw(path)
+                self.assertEqual(status, 404)
+
+    def test_refuses_non_markdown_and_missing_files(self):
+        for path in ("/docs/API", "/docs/nope.md", "/docs/board.html"):
+            with self.subTest(path=path):
+                status, _, _ = self.raw(path)
+                self.assertEqual(status, 404)

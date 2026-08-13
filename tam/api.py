@@ -36,6 +36,13 @@ from .models import (
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
+# Agent-facing documentation is served from the repo rather than copied to
+# shared storage, for the same reason the code is not published there: a second
+# copy is a copy that drifts. A node reads its instructions from the same host
+# it reads its issues from, so the two can never disagree about which version
+# is current.
+DOCS_DIR = Path(__file__).resolve().parent.parent / "docs"
+
 ISSUE_FIELDS = ("title", "body", "type", "priority", "assignee", "due_date",
                 "external_ref", "labels", "parent")
 
@@ -487,6 +494,25 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._send_raw(200, html.encode(), "text/html; charset=utf-8")
 
+    def _serve_docs(self, path):
+        """Serve `docs/*.md` as plain text: GET /docs, GET /docs/ARGUS.md.
+
+        Read-only and confined to DOCS_DIR by resolving the candidate and
+        checking its parent, so a traversal attempt lands outside and is
+        refused rather than reaching into the checkout.
+        """
+        name = path[len("/docs"):].lstrip("/")
+        if not name:
+            listing = sorted(p.name for p in DOCS_DIR.glob("*.md"))
+            return self._send(200, {"ok": True, "data": listing})
+        candidate = (DOCS_DIR / name).resolve()
+        if candidate.parent != DOCS_DIR.resolve() or candidate.suffix != ".md" \
+                or not candidate.is_file():
+            return self._send(404, {"ok": False, "error": {
+                "code": "not_found", "message": f"no such document: {name}"}})
+        self._send_raw(200, candidate.read_bytes(),
+                       "text/markdown; charset=utf-8")
+
     def _authorised(self):
         expected = self.server.tam_token
         if not expected:
@@ -522,6 +548,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/" and method == "GET":
             return self._serve_board()
+
+        if method == "GET" and (path == "/docs" or path.startswith("/docs/")):
+            if not self._authorised():
+                err = AuthError("missing or invalid bearer token")
+                return self._send(err.http_status,
+                                  {"ok": False, "error": err.to_dict()})
+            return self._serve_docs(path)
 
         matched_path = False
         for route_method, pattern, fn, needs_auth in COMPILED:

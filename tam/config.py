@@ -23,6 +23,10 @@ DEFAULTS = {
     "stale_days": 7,
     "wip_limit": 3,
     "digest_dir": "data/digests",
+    # Where `tam backup` writes. Relative paths resolve under the install root;
+    # point this at another filesystem, because the database it snapshots now
+    # lives on a single host's local disk and has no redundancy underneath it.
+    "backup_dir": "data/backups",
     "api_host": "127.0.0.1",
     "api_port": 8787,
     # Extra Host header values the API will answer to, beyond the addresses it
@@ -61,6 +65,7 @@ class Config:
     stale_days: int = DEFAULTS["stale_days"]
     wip_limit: int = DEFAULTS["wip_limit"]
     digest_dir: str = DEFAULTS["digest_dir"]
+    backup_dir: str = DEFAULTS["backup_dir"]
     api_host: str = DEFAULTS["api_host"]
     api_port: int = DEFAULTS["api_port"]
     api_allowed_hosts: list = field(default_factory=list)
@@ -89,6 +94,11 @@ class Config:
     @property
     def digest_path(self):
         p = Path(self.digest_dir)
+        return p if p.is_absolute() else self.root / p
+
+    @property
+    def backup_path(self):
+        p = Path(self.backup_dir)
         return p if p.is_absolute() else self.root / p
 
     def to_dict(self):

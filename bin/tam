@@ -1,4 +1,12 @@
 #!/bin/sh
 # TAM command-line entrypoint.
 ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+
+# Resolve TAM_HOME the same way every entrypoint does, so `tam` from a bare
+# cron line and `tam` from a shell address the same database. Sourcing does not
+# override an explicit TAM_HOME (see .tam-env).
+if [ -r "${TAM_ENV:-$ROOT/.tam-env}" ]; then
+    . "${TAM_ENV:-$ROOT/.tam-env}"
+fi
+
 exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m tam.cli "$@"

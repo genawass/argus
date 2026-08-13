@@ -125,6 +125,14 @@ The token is generated at `tam init` with mode 600. There is one shared token: i
 
 Unknown filter names are rejected with `400 validation`.
 
+## Served outside the JSON API
+
+| method | path | auth | description |
+|---|---|---|---|
+| `GET` | `/` | no | The board UI (HTML). The token is injected into the page; no CORS headers are sent. |
+| `GET` | `/docs` | yes | List the agent-facing documents (`docs/*.md`). |
+| `GET` | `/docs/{name}.md` | yes | One document, as `text/markdown`. Nodes read their instructions from the host that enforces them rather than from a copy on shared storage. |
+
 ## Notes
 
 - Status changes go through `POST /api/issues/{key}/transition`, never `PATCH`. The workflow matrix and its guards are enforced server-side and cannot be bypassed by any client.

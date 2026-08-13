@@ -1,7 +1,7 @@
 [Unit]
 Description=TAM HTTP API (database owner host)
 Documentation=file://__TAM_ROOT__/README.md
-After=network-online.target remote-fs.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -10,8 +10,10 @@ Environment=TAM_HOME=__TAM_HOME__
 ExecStart=__TAM_ROOT__/bin/tam-api
 Restart=on-failure
 RestartSec=5
-# Only the database owner host may run this: it is the single writer.
-# Every other node reaches the data through it (README: Cluster access).
+# This host owns the database file on local disk and is the single writer.
+# Every other node reaches the data through this service (README: Cluster
+# access) -- there is no shared-filesystem path to the data at all, which is
+# why remote-fs.target is not a dependency here.
 
 [Install]
 WantedBy=default.target

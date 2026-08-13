@@ -128,3 +128,19 @@ class TestOwnerGuard(TamTestCase):
         payload = json.loads(buf.getvalue())
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["code"], "conflict")
+
+
+class TestFixtureIsolation(TamTestCase):
+    """The suite must not inherit the shell's pointer at the live service.
+
+    `env.sh` puts TAM_API_URL and TAM_API_TOKEN in every working shell, and the
+    CLI reads TAM_API_URL as "use the remote service". Without this the suite
+    quietly tests the developer's real API and fails far from the cause.
+    """
+
+    def test_client_env_is_cleared_inside_a_test(self):
+        for name in ("TAM_API_URL", "TAM_API_TOKEN", "TAM_ACTOR"):
+            self.assertNotIn(name, os.environ)
+
+    def test_tam_home_points_at_the_fixture(self):
+        self.assertEqual(os.environ["TAM_HOME"], str(self.root))

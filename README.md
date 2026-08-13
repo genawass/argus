@@ -13,7 +13,7 @@ like "still blocked by TAM-19", and no migration rewrites prose.
 
 Python 3.12 standard library and SQLite. **No dependencies, nothing to install.**
 
-Architecture and the reasoning behind it: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). HTTP reference: [docs/API.md](docs/API.md). Agent instructions: `/mnt/datasets/tam/ARGUS.md`.
+Architecture and the reasoning behind it: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). HTTP reference: [docs/API.md](docs/API.md). Agent instructions: [docs/ARGUS.md](docs/ARGUS.md), served live at `GET /docs/ARGUS.md`.
 
 ---
 
@@ -43,8 +43,11 @@ behave identically, and why `tests/test_adapters.py::TestParity` can prove it.
                  tam/db.py          sqlite + migrations
 ```
 
-Everything mutable lives in `data/` (gitignored): the database, `config.json`,
-the API token, and one markdown + JSON digest per day.
+Everything mutable lives in `$TAM_HOME/data`: the database, `config.json`, the
+API token, and one markdown + JSON digest per day. `TAM_HOME` defaults to the
+checkout (so `./bin/tam init` just works) and is set to `~/.local/share/tam` on
+the serving host by [`.tam-env`](.tam-env) — off the shared filesystem, and out
+of reach of a `git clean`.
 
 ---
 
@@ -350,12 +353,23 @@ issue, params, latest metrics, target status and what is currently running.
 ## Backups
 
 ```sh
-tam backup                     # data/backups/, 14 kept, nightly at 02:30
+tam backup                     # 14 kept, nightly at 02:30
 ```
 
 Uses SQLite's online backup API rather than copying the file: a plain copy of a
 live WAL database can capture a torn state. Each snapshot is integrity-checked
 before old ones are pruned, and discarded if the check fails.
+
+Destination is `backup_dir` in `config.json`, and it should name **another
+filesystem** — here `/mnt/datasets/tam/backups`. The database lives on one
+host's local disk, so a backup beside it survives a bad migration and nothing
+else. Restore is a file copy:
+
+```sh
+systemctl --user stop tam-api.service
+cp /mnt/datasets/tam/backups/tam-<stamp>.db "$TAM_HOME/data/tam.db"
+systemctl --user start tam-api.service
+```
 
 ## The 08:00 daily sync
 
@@ -406,16 +420,41 @@ unaffected. To automate the review later, add a second timer at 08:00 running
 
 ## Cluster access
 
-The database lives on shared storage at `/mnt/datasets/tam/data/tam.db`, with the
-code staged alongside it at `/mnt/datasets/tam/code` so every node has it:
+One host serves; everyone else is an HTTP client.
 
-```sh
-source /mnt/datasets/tam/env.sh     # sets TAM_HOME=/mnt/datasets/tam
-/mnt/datasets/tam/code/bin/tam issue list
+```
+worker-node02 (serving host)              any other node
+  ~/.local/share/tam/data/tam.db          HTTP + bearer token
+  tam-api on :8787                          • browser  -> /board
+  digest / scan / backup timers             • curl     -> /api/*
+       |
+       +-- ssh outward to probe watched jobs
 ```
 
-**Only one host may open the database file.** This is not a policy choice, it is
-measured. Two hosts writing the same SQLite file on this NFSv4 mount:
+**No TAM code is published to shared storage.** `/mnt/datasets/tam/env.sh`
+carries two variables and nothing else:
+
+```sh
+source /mnt/datasets/tam/env.sh    # TAM_API_URL + TAM_API_TOKEN
+curl -H "Authorization: Bearer $TAM_API_TOKEN" "$TAM_API_URL/api/issues"
+curl -H "Authorization: Bearer $TAM_API_TOKEN" "$TAM_API_URL/docs/ARGUS.md"
+xdg-open "$TAM_API_URL/"           # the board UI — zero install
+```
+
+That is the whole client story on a node that has nothing installed. If you also
+want the `tam` CLI there, clone the repo and set `TAM_API_URL`; `--api URL`
+selects remote mode explicitly, and the token resolves from `TAM_API_TOKEN`,
+else `TAM_API_TOKEN_FILE`, else `$TAM_HOME/data/api_token`.
+
+Agent instructions are served too, rather than staged on the share:
+`GET /docs` lists `docs/*.md`, `GET /docs/ARGUS.md` returns one. A node reads
+its instructions from the same host that enforces them, so the two cannot
+disagree about which version is current.
+
+### Why the database is not on shared storage
+
+**Only one host may open a SQLite database file.** This is not a policy choice,
+it is measured. Two hosts writing the same file on this NFSv4 mount:
 
 | journal mode | result |
 |---|---|
@@ -426,32 +465,40 @@ WAL keeps coordination state in a shared-memory file that does not exist across
 machines, and NFS advisory locking is not strong enough to save rollback-journal
 mode either. Neither is safe for a database you expect to keep your task edits.
 
-So `config.json` records `db_host`, and any other host is refused with a clear
-error and exit code 6 rather than silently dropping writes:
+Since a second host could never open the file anyway, putting it on NFS bought
+no availability — only a corruption surface and an invitation to try. It now
+lives on the serving host's local disk, which says the same thing more honestly:
+one writer, one copy, one machine to back up.
+
+The ownership guard remains as a backstop. `config.json` records `db_host`, and a
+foreign host is refused with exit code 6 rather than silently dropping writes:
 
 ```
 error: /mnt/datasets/tam/data/tam.db is owned by db-host; this is
 worker-01. Opening a shared SQLite database from a second host loses writes.
 ```
 
-`TAM_ALLOW_FOREIGN_DB=1` lifts the guard — use it only when the owner host is
-definitely not running, for example to take over after a machine dies. To move
-ownership permanently, stop the API on the old host and set `db_host` in
-`data/config.json`.
+It only fires when the database is on a network filesystem, so in the normal
+local-disk setup you will never see it. `TAM_ALLOW_FOREIGN_DB=1` lifts it. To
+move ownership permanently, stop the API on the old host, copy the file, and set
+`db_host` in `data/config.json`.
 
-### Using TAM from any node
+### Where things live
 
-Source the shared env file. It points `tam` at the local file on the owner host
-and at the API everywhere else, so the same command works either way:
+| path | what |
+|---|---|
+| `~/dev/argus` | the code — a git checkout, on each host that runs it |
+| `$TAM_HOME` (`~/.local/share/tam`) | database, config, token, digests — local disk |
+| `/mnt/datasets/tam/env.sh` | `TAM_API_URL` + `TAM_API_TOKEN` for clients (from [`deploy/env.sh`](deploy/env.sh)) |
+| `/mnt/datasets/tam/api_token` | the token clients read; rotate here |
+| `/mnt/datasets/tam/backups` | off-host snapshots, nightly |
 
-```sh
-source /mnt/datasets/tam/env.sh
-tam issue list
-tam issue move TAM-8 in_progress
-```
+That is everything on shared storage: an address, a token, and snapshots. No
+code, no database, no documents.
 
-`--api URL` (or `TAM_API_URL`) selects remote mode explicitly. The token comes
-from `TAM_API_TOKEN`, else `TAM_API_TOKEN_FILE`, else `$TAM_HOME/data/api_token`.
+`.tam-env` in the checkout resolves `TAM_HOME` for `bin/tam`, `bin/tam-api` and
+`bin/tam-mcp` alike, so a bare cron line and an interactive shell address the
+same database. Set `TAM_ENV` to point at a different file.
 
 Remote mode is not a second client. `tam/remote.py` presents the same method
 surface as `core.Service` over HTTP, so `cli.py` runs against it unchanged and
@@ -483,6 +530,7 @@ for a private cluster network, not for an untrusted one.
 ```json
 { "default_project": "TAM", "actor": "agent", "timezone": "Asia/Jerusalem",
   "stale_days": 7, "wip_limit": 3, "digest_dir": "data/digests",
+  "backup_dir": "/mnt/datasets/tam/backups",
   "api_host": "127.0.0.1", "api_port": 8787 }
 ```
 
@@ -496,19 +544,12 @@ the API token against the original root — use `--home` to move everything.
 python3 -m unittest discover -s tests -t .
 ```
 
-98 tests, no dependencies, roughly nine seconds. They cover the transition
+238 tests, no dependencies, roughly twenty-five seconds. They cover the transition
 matrix exhaustively (every declared move legal, every undeclared one refused),
 both guards, link pairing and cycle detection, every query filter, audit
 completeness, concurrent writers against one database, and adapter parity.
 
-## Backup
+## Migrations
 
-The database is one file. Copy it:
-
-```sh
-sqlite3 data/tam.db ".backup data/tam-$(date +%F).db"   # if sqlite3 is installed
-cp data/tam.db data/tam-$(date +%F).db                  # or just stop writers and copy
-```
-
-Migrations are forward-only; rollback means restoring a copy, which for a
-single-user SQLite database is the honest answer.
+Forward-only. Rollback means restoring a snapshot (see [Backups](#backups)),
+which for a single-user SQLite database is the honest answer.

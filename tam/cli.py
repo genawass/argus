@@ -179,8 +179,10 @@ def cmd_init(svc, args):
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     if args.project_key:
         cfg.default_project = args.project_key.upper()
-    # On shared storage, record which host owns direct file access. Every other
-    # host is then refused and pointed at the API rather than losing writes.
+    # If someone initialises onto a network filesystem anyway, record which host
+    # owns direct file access, so every other host is refused and pointed at the
+    # API rather than losing writes. Local disk is the supported layout and
+    # leaves db_host unset -- there, the filesystem enforces this by itself.
     shared = db_mod.is_network_fs(cfg.db_path)
     if shared and not cfg.db_host:
         cfg.db_host = socket.gethostname()

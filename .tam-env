@@ -1,1 +1,13 @@
-TAM_HOME=/mnt/datasets/tam
+# Host-local TAM environment, sourced by bin/tam, bin/tam-api and bin/tam-mcp.
+#
+# TAM_HOME is the install root: the database, config, token and digests live
+# under $TAM_HOME/data. It is LOCAL DISK on purpose. SQLite on a network
+# filesystem cannot be opened safely from a second host (measured: WAL lost
+# 100% of the second host's writes), so shared storage bought nothing that the
+# single-writer rule did not already require -- while adding a corruption
+# surface. Other nodes reach this database over the HTTP API, never the file.
+#
+# `:=` rather than `=`: an explicitly-set TAM_HOME wins, which is what lets the
+# systemd units and `tam --root` point somewhere else without editing this.
+: "${TAM_HOME:=$HOME/.local/share/tam}"
+export TAM_HOME

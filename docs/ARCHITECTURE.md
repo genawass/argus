@@ -41,8 +41,8 @@ branching. Remote mode is not a second client.
 
 ## 2. Storage, and the one hard constraint
 
-SQLite at `/mnt/datasets/tam/data/tam.db` on shared NFS. WAL, `foreign_keys=ON`,
-`busy_timeout=5000`, explicit `BEGIN IMMEDIATE` for writes.
+SQLite at `$TAM_HOME/data/tam.db` on the serving host's **local disk**. WAL,
+`foreign_keys=ON`, `busy_timeout=5000`, explicit `BEGIN IMMEDIATE` for writes.
 
 **Only one host may open the file.** This is measured, not cautious:
 
@@ -53,11 +53,27 @@ SQLite at `/mnt/datasets/tam/data/tam.db` on shared NFS. WAL, `foreign_keys=ON`,
 
 WAL keeps coordination state in a shared-memory file that does not exist across
 machines; NFS advisory locking is not strong enough to rescue rollback-journal
-mode either. So `config.json` records `db_host`, and any other host is refused
-with exit code 6 and told to use the API. `TAM_ALLOW_FOREIGN_DB=1` lifts the
-guard for takeover after the owner dies.
+mode either.
 
-Every other node reaches the data through `tam-api` on the owner host.
+That measurement is also why the database is not on NFS at all any more. Shared
+storage could never deliver the thing it looks like it delivers — a second host
+opening the file — so it contributed no availability, only a corruption
+surface and a tempting mistake. Local disk states the constraint honestly:
+there is exactly one writer because there is exactly one copy.
+
+`config.json` still records `db_host`, and `core.check_db_owner` still refuses a
+foreign host with exit code 6, but the guard only fires when `db_path` is on a
+network filesystem. It is now a backstop for someone pointing `TAM_HOME` back at
+a share, not a load-bearing rule. `TAM_ALLOW_FOREIGN_DB=1` lifts it.
+
+Every other node reaches the data through `tam-api` on the serving host. **No
+TAM code is published to shared storage**; `/mnt/datasets/tam/env.sh` carries
+`TAM_API_URL` and `TAM_API_TOKEN` and nothing else. A node needs an address and
+a token, not an install.
+
+Since local disk has no redundancy under it, `backup_dir` points off-host
+(`/mnt/datasets/tam/backups`). That is the only thing shared storage is now
+trusted with, and it is a write-once artifact rather than a live database.
 `env.sh` selects local-file or API mode by hostname, so `tam` behaves the same
 either way.
 
@@ -258,7 +274,8 @@ are.
 |---|---|
 | [`README.md`](../README.md) | operators — install, run, daily use |
 | [`docs/API.md`](API.md) | HTTP reference, generated from the route table |
-| `/mnt/datasets/tam/ARGUS.md` | agents — how to record work |
+| [`docs/ARGUS.md`](ARGUS.md) | agents — how to record work |
+| [`docs/SLURM.md`](SLURM.md) | agents — how to run cluster jobs |
 | [`SPEC.md`](../SPEC.md) | historical — the original approved spec |
 | this file | maintainers — why it is shaped this way |
 

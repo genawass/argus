@@ -1,4 +1,9 @@
 #!/bin/sh
-# TAM HTTP API server.
+# TAM HTTP API server. Runs on the one host that owns the database file.
 ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+
+if [ -r "${TAM_ENV:-$ROOT/.tam-env}" ]; then
+    . "${TAM_ENV:-$ROOT/.tam-env}"
+fi
+
 exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m tam.api "$@"

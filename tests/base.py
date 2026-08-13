@@ -4,6 +4,13 @@ TAM_HOME is patched, not just the database path. `--db` overrides only the
 database file, so a test that passed `--db` alone would still resolve
 `digest_dir` and the API token against the real install root and write into the
 developer's live data directory.
+
+The rest of the TAM_* namespace is cleared for a related reason. Working on a
+node means having `TAM_API_URL` and `TAM_API_TOKEN` in your shell -- that is
+what `env.sh` is for -- and the CLI treats `TAM_API_URL` as "use the remote
+service". A suite that inherited it would silently test the developer's live
+API instead of its own fixture, and fail in ways that point nowhere near the
+cause. Tests that want remote mode set it themselves.
 """
 
 import os
@@ -26,6 +33,9 @@ class TamTestCase(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, {"TAM_HOME": str(self.root)})
         patcher.start()
         self.addCleanup(patcher.stop)
+        for name in ("TAM_API_URL", "TAM_API_TOKEN", "TAM_API_TOKEN_FILE",
+                     "TAM_ACTOR", "TAM_ALLOW_FOREIGN_DB", "TAM_ENV"):
+            os.environ.pop(name, None)      # restored by patcher.stop()
         self.config = config.load(root=self.root)
         self.config.actor = "tester"
         self.svc = Service(self.config)

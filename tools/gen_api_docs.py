@@ -112,6 +112,21 @@ def build():
         out.append(f"- **{name}**: " + ", ".join(f"`{f}`" for f in group))
     out.append("\nUnknown filter names are rejected with `400 validation`.\n")
 
+    # Served outside the route table, so the generator cannot see them: the
+    # board is HTML with the token injected, and /docs streams files rather
+    # than JSON envelopes. Both are client-facing, so they are named here by
+    # hand instead of being silently absent.
+    out.append("## Served outside the JSON API\n")
+    out.append("| method | path | auth | description |\n|---|---|---|---|\n"
+               "| `GET` | `/` | no | The board UI (HTML). The token is injected "
+               "into the page; no CORS headers are sent. |\n"
+               "| `GET` | `/docs` | yes | List the agent-facing documents "
+               "(`docs/*.md`). |\n"
+               "| `GET` | `/docs/{name}.md` | yes | One document, as "
+               "`text/markdown`. Nodes read their instructions from the host "
+               "that enforces them rather than from a copy on shared storage. "
+               "|\n")
+
     out.append("## Notes\n")
     out.append("- Status changes go through `POST /api/issues/{key}/transition`, "
                "never `PATCH`. The workflow matrix and its guards are enforced "
