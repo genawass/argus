@@ -138,15 +138,25 @@ GET  · POST · DELETE   /api/issues/{key}/links
 GET    /api/issues/{key}/history
 GET    /api/digest[?date=&write=1]      POST /api/digest/{date}/review
 GET    /api/stats                       GET  /api/labels
+GET    /docs · /docs/{name}.md          agent instructions, served from docs/
 ```
 
 Query filters use the same names as the CLI flags. Errors map to
 `400` validation · `401` bad token · `404` not found · `409` conflict or
 transition denied.
 
-**This binds to loopback by design.** It is a single-user local service with no
-per-user permissions; `--host 0.0.0.0` would expose your whole issue database to
-the network behind one shared token. The server warns if you do it anyway.
+**It defaults to loopback, and this deployment does not.** A single node keeps
+`api_host: 127.0.0.1` and nothing is exposed. Serving the cluster means setting
+`0.0.0.0` — which is how every other node reaches the data, since the database
+is local disk on this host and there is no shared-filesystem path to it.
+
+Understand what that buys and costs. There are no per-user permissions: one
+bearer token grants full read and write to every issue, so anyone on the LAN
+holding it can do anything you can. That is an accepted trade for a single-user
+system on a trusted network, not an oversight — but it means the token is the
+whole security boundary. Keep it `0600`, rotate it by writing
+`/mnt/datasets/tam/api_token` and restarting, and do not put this on a network
+you do not control. The server warns at startup when it binds beyond loopback.
 
 ## Board UI
 
@@ -425,7 +435,7 @@ One host serves; everyone else is an HTTP client.
 ```
 worker-node02 (serving host)              any other node
   ~/.local/share/tam/data/tam.db          HTTP + bearer token
-  tam-api on :8787                          • browser  -> /board
+  tam-api on :8787                          • browser  -> /
   digest / scan / backup timers             • curl     -> /api/*
        |
        +-- ssh outward to probe watched jobs

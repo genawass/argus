@@ -1,12 +1,15 @@
 """HTTP adapter.
 
-Localhost-only JSON API over `http.server`. Like the CLI it parses, calls core,
-and serialises -- no rules live here.
+JSON API over `http.server`. Like the CLI it parses, calls core, and serialises
+-- no rules live here.
 
-Security posture: bound to 127.0.0.1 and gated on a bearer token generated at
-`tam init`. This is a single-user local service, not an internet-facing one;
-binding elsewhere requires editing config deliberately and is called out in the
-README.
+Security posture: loopback by default, gated on a bearer token generated at
+`tam init`. Serving a cluster means setting `api_host` to 0.0.0.0 deliberately,
+which is what every other node uses to reach a database that only this host can
+open. There are no per-user permissions: the token is the entire boundary, so
+one holder can do anything any other holder can. That is an accepted trade for a
+single-user system on a trusted network -- `make_server` warns on startup when
+the bind is not loopback, and the Host allowlist below still applies.
 """
 
 import hmac
