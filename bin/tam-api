@@ -1,0 +1,4 @@
+#!/bin/sh
+# TAM HTTP API server.
+ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m tam.api "$@"

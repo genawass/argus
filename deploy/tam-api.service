@@ -1,0 +1,17 @@
+[Unit]
+Description=TAM HTTP API (database owner host)
+Documentation=file://__TAM_ROOT__/README.md
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=TAM_HOME=__TAM_HOME__
+ExecStart=__TAM_ROOT__/bin/tam-api
+Restart=on-failure
+RestartSec=5
+# Only the database owner host may run this: it is the single writer.
+# Every other node reaches the data through it (README: Cluster access).
+
+[Install]
+WantedBy=default.target

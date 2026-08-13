@@ -1,0 +1,10 @@
+[Unit]
+Description=TAM cluster scan (probe watched jobs, record metrics)
+Documentation=file://__TAM_ROOT__/README.md
+After=network-online.target remote-fs.target
+
+[Service]
+Type=oneshot
+Environment=TAM_HOME=__TAM_HOME__
+ExecStart=__TAM_ROOT__/bin/tam scan --quiet
+# Read-only against the cluster: squeue/sacct, ssh pgrep, directory stat.

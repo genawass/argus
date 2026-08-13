@@ -1,0 +1,9 @@
+[Unit]
+Description=TAM daily digest
+Documentation=file://__TAM_ROOT__/README.md
+
+[Service]
+Type=oneshot
+ExecStart=__TAM_ROOT__/bin/tam digest --write --quiet
+# The digest is pure local computation: no network, no writes outside TAM_HOME.
+Environment=TAM_HOME=/mnt/datasets/tam

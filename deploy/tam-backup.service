@@ -1,0 +1,8 @@
+[Unit]
+Description=TAM database backup
+Documentation=file://__TAM_ROOT__/README.md
+
+[Service]
+Type=oneshot
+Environment=TAM_HOME=__TAM_HOME__
+ExecStart=__TAM_ROOT__/bin/tam backup --keep 14 --quiet

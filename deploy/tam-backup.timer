@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly TAM database backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+Unit=tam-backup.service
+
+[Install]
+WantedBy=timers.target

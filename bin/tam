@@ -1,0 +1,4 @@
+#!/bin/sh
+# TAM command-line entrypoint.
+ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m tam.cli "$@"

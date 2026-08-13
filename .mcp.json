@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "tam": {
+      "command": "./bin/tam-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

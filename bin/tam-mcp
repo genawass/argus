@@ -1,0 +1,18 @@
+#!/bin/sh
+# TAM MCP stdio server. Protocol frames on stdout, logs on stderr.
+ROOT=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+
+# MCP clients spawn this with a bare environment -- no TAM_HOME, no
+# TAM_API_URL -- so without this the server silently falls back to the default
+# data root and serves an empty local database instead of the cluster's.
+# env.sh is the single place that decides direct-vs-API per host, so source it
+# rather than hardcoding either choice in the client's config: on the database
+# owner it sets TAM_HOME alone, everywhere else it also sets TAM_API_URL and
+# the token, which is what keeps the single-writer rule intact.
+# Redirect to stderr while sourcing: anything printed on stdout would be
+# parsed as a protocol frame.
+if [ -r "${TAM_ENV:-/mnt/datasets/tam/env.sh}" ]; then
+    . "${TAM_ENV:-/mnt/datasets/tam/env.sh}" >&2
+fi
+
+exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m tam.mcp "$@"
