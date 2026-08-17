@@ -172,6 +172,19 @@
   }
   .lane-stat b { font-weight: 600; color: var(--ink-2); }
   .lane-stat .wip-over { color: var(--critical); }
+  /* Next-up hint: what this lane should pull, or why it can't. */
+  .lane-next {
+    font-size: 11.5px; color: var(--ink-3); display: inline-flex; gap: 5px;
+    align-items: baseline; white-space: nowrap;
+  }
+  .lane-next .arrow { color: var(--accent); font-weight: 700; }
+  .lane-next a {
+    color: var(--accent); text-decoration: none;
+    font: 500 11.5px/1 ui-monospace, Menlo, monospace;
+  }
+  .lane-next a:hover { text-decoration: underline; }
+  .lane-next.is-idle { color: var(--warning); }
+  .lane-next.is-full { color: var(--ink-3); }
   .lane-rule { height: 1px; background: var(--line-soft); margin: 0 0 10px; }
   .col {
     background: var(--surface-2); border: 1px solid var(--line);
@@ -631,7 +644,9 @@ const clearTargets = () => document.querySelectorAll(".col")
   .forEach(c => c.classList.remove("drop-ok", "drop-no"));
 
 /* ------------------------------------------------------------ swimlanes */
-const LANE_NONE = "__none__";              // sentinel: issues with no epic
+/* Must match core.queue.NO_EPIC -- the board matches lanes against the pull
+   queue by this key, and a divergence silently blanks every next-up hint. */
+const LANE_NONE = "_none";
 const collapsed = new Set(
   JSON.parse(localStorage.getItem("tam.lanes.collapsed") || "[]"));
 const saveCollapsed = () => localStorage.setItem(
@@ -671,6 +686,35 @@ function lanesOf(issues) {
   return ordered;
 }
 
+/* The lane's next-up hint, from the same /api/board payload as the cards.
+   Three states worth distinguishing: something can start, the queue is backed up
+   behind a full lane, or there is room and nothing promoted to todo. */
+function laneNext(laneKey) {
+  const pull = BOARD.pull;
+  if (!pull) return null;
+  const mine = pull.ready.filter(r => r.lane === laneKey);
+  const top = mine.find(r => r.pullable);
+  if (top) {
+    return el("span", { className: "lane-next", title: top.title },
+      el("span", { className: "arrow" }, "→"),
+      el("a", { href: "#" + top.key,
+                onclick: ev => { ev.stopPropagation(); openDrawer(top.key); } }, top.key),
+      el("span", null, "next"));
+  }
+  if (mine.length) {
+    return el("span", { className: "lane-next is-full" },
+      el("span", null, `${mine.length} waiting on a free slot`));
+  }
+  const starved = (pull.starved || []).find(s => s.lane === laneKey);
+  if (starved) {
+    return el("span", { className: "lane-next is-idle" },
+      el("span", null, starved.candidate
+        ? `${starved.headroom} free · nothing queued`
+        : `${starved.headroom} free · no candidates`));
+  }
+  return null;
+}
+
 function laneHead(lane, inProg) {
   const over = inProg > WF.wip_limit;
   const open = lane.issues.filter(i => !WF.closed_statuses.includes(i.status)).length;
@@ -687,6 +731,7 @@ function laneHead(lane, inProg) {
                   onclick: ev => { ev.stopPropagation(); openDrawer(lane.key); } }, "open")
       : null,
     el("span", { className: "lane-stat" },
+      laneNext(lane.key),
       el("span", null, el("b", null, String(open)), " open"),
       el("span", { className: over ? "wip-over" : "" },
          el("b", null, String(inProg)), `/${WF.wip_limit} in progress`)));
@@ -727,9 +772,17 @@ function render() {
       laneEl.append(laneHead(lane, inProg), el("div", { className: "lane-rule" }));
     }
 
+    /* Queue position for the todo column, so the board lists it in the same
+       order `tam next` does. Unranked keys sort last, order otherwise preserved. */
+    const rank = new Map((BOARD.pull?.ready || []).map((r, n) => [r.key, n]));
+
     const cols = el("div", { className: "lane-cols" });
     for (const status of statuses) {
-      const mine = lane.issues.filter(i => i.status === status);
+      let mine = lane.issues.filter(i => i.status === status);
+      if (status === "todo" && rank.size)
+        mine = [...mine].sort((a, b) =>
+          (rank.has(a.key) ? rank.get(a.key) : Infinity) -
+          (rank.has(b.key) ? rank.get(b.key) : Infinity));
       const col = el("div", { className: "col" });
       col.dataset.status = status;
       if (status === "in_progress" && mine.length > WF.wip_limit) col.classList.add("over-wip");

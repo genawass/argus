@@ -19,6 +19,7 @@ from . import db as db_mod
 from . import digest as digest_mod
 from .clock import expand_date, today
 from .core import Service, allowed_from
+from .core import queue as queue_mod
 from .core.query import IssueFilter, SORT_COLUMNS
 from .errors import TamError, ValidationError
 from .models import ISSUE_TYPES, PRIORITIES, STATUSES
@@ -413,6 +414,54 @@ def cmd_digest(svc, args):
         where = getattr(svc.config, "api_url", None) or svc.config.digest_path
         text += f"\nsaved to {where}"
     return Out(payload, text)
+
+
+def cmd_next(svc, args):
+    """What to start next: the todo queue, gated on each lane's WIP headroom."""
+    pull = svc.next_up(wip_limit=args.wip_limit)
+    lines = []
+
+    ready = pull["ready"]
+    can = [r for r in ready if r["pullable"]]
+    if can:
+        lines.append(f"start now ({len(can)}):")
+        for r in can:
+            lane = r["lane"] if r["lane"] != queue_mod.NO_EPIC else "-"
+            lines.append(f"  {r['key']:<10} {r['priority']}  {lane:<8} {r['title']}")
+    queued = [r for r in ready if not r["pullable"]]
+    if queued:
+        lines.append("")
+        lines.append(f"queued behind a full lane ({len(queued)}):")
+        for r in queued:
+            lane = r["lane"] if r["lane"] != queue_mod.NO_EPIC else "-"
+            lines.append(f"  {r['key']:<10} {r['priority']}  {lane:<8} {r['title']}")
+
+    if pull["blocked"]:
+        lines.append("")
+        lines.append(f"blocked ({len(pull['blocked'])}):")
+        for b in pull["blocked"]:
+            by = ", ".join(x["key"] for x in b["blocked_by"])
+            lines.append(f"  {b['key']:<10} {b['priority']}  blocked by {by}")
+
+    if pull["starved"]:
+        lines.append("")
+        lines.append("room but nothing queued:")
+        for s in pull["starved"]:
+            lane = s["lane"] if s["lane"] != queue_mod.NO_EPIC else "-"
+            c = s["candidate"]
+            tail = (f"{s['backlog_count']} in backlog, top {c['key']} {c['priority']} {c['title']}"
+                    if c else "nothing in backlog either")
+            lines.append(f"  {lane:<10} {s['headroom']} free · {tail}")
+
+    if not lines:
+        lines.append("nothing in todo — promote something from backlog first")
+
+    lines.append("")
+    lines.append("  ".join(
+        f"{l['lane'] if l['lane'] != queue_mod.NO_EPIC else '-'} "
+        f"{l['in_progress']}/{l['limit']}"
+        for l in pull["lanes"]))
+    return Out(pull, "\n".join(lines))
 
 
 def cmd_review(svc, args):
@@ -845,6 +894,11 @@ def build_parser():
     leaf(link, "list", cmd_link_list).add_argument("key")
 
     # -- digest / review / stats / config
+    p = leaf(sub, "next", cmd_next,
+             help="what to start next: the todo queue, gated on WIP headroom")
+    p.add_argument("--wip-limit", dest="wip_limit", type=int, metavar="N",
+                   help="override the configured WIP limit for this view")
+
     p = leaf(sub, "digest", cmd_digest, help="build the daily digest")
     p.add_argument("--date", metavar="DATE")
     p.add_argument("--write", action="store_true", help="persist and write files")

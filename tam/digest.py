@@ -11,6 +11,7 @@ from datetime import date
 from .clock import parse_date, shift, today, utcnow
 from . import providers
 from .core import IssueFilter
+from .core import queue
 from .db import tx
 
 SECTION_TITLES = [
@@ -18,6 +19,7 @@ SECTION_TITLES = [
     ("due_today", "Due today"),
     ("due_this_week", "Due this week"),
     ("in_progress", "In progress"),
+    ("next_up", "Next up"),
     ("blocked", "Blocked"),
     ("stale", "Stale"),
     ("triage", "Triage queue"),
@@ -96,15 +98,13 @@ def build(svc, run_date=None):
 
     # A container is an issue other issues hang off. It reads as in_progress
     # only because its children are, so counting it as work in progress
-    # overstates the WIP and makes the limit meaningless. Nesting is a single
-    # level (core.issues._resolve_parent), so any issue named as a parent is a
-    # container -- including one whose children are all closed.
-    container_keys = {
-        i.parent_key
-        for i in issues(has_parent=True, include_closed=True)
-        if i.parent_key
-    }
-    wip = sum(1 for i in in_progress if i["key"] not in container_keys)
+    # overstates the WIP and makes the limit meaningless. The rule lives in
+    # core.queue so the digest, the pull queue and the board agree on it.
+    containers = queue.container_keys(svc)
+    wip = sum(1 for i in in_progress if i["key"] not in containers)
+
+    # What should start next, and what is stopping the rest.
+    pull = svc.next_up()
     payload = {
         "date": run_date,
         "generated_at": utcnow(),
@@ -114,11 +114,13 @@ def build(svc, run_date=None):
             "due_today": due_today,
             "due_this_week": due_week,
             "in_progress": in_progress,
+            "next_up": pull["ready"],
             "blocked": blocked,
             "stale": stale,
             "triage": triage,
             "closed_recently": closed_recently,
         },
+        "pull": pull,
         "counts": counts,
         "wip": {"count": wip, "limit": svc.config.wip_limit,
                 "over": wip > svc.config.wip_limit},
@@ -233,7 +235,10 @@ def mark_reviewed(svc, run_date, notes=None):
 
 def _line(item, show=None):
     key = item["key"]
-    bits = [f"  {key:<10} {item['priority']}  {item['title']}"]
+    # "->" marks an issue that fits inside its lane's remaining WIP; everything
+    # else in Next up is queued behind a full lane, which is worth seeing.
+    mark = "->" if item.get("pullable") else ("  " if "pullable" in item else "")
+    bits = [f"{mark}{'' if mark else '  '}{key:<10} {item['priority']}  {item['title']}"]
     extra = []
     if show == "days_late":
         extra.append(f"{item['days_late']}d late")
@@ -269,13 +274,34 @@ def render_markdown(payload):
         note = ""
         if key == "stale":
             note = f" (no activity in {payload['stale_days']}d)"
-        out.append(f"## {title}{note} ({len(items)})")
+        if key == "next_up":
+            pullable = (payload.get("pull") or {}).get("pullable_now", 0)
+            note = f" ({pullable} can start now, {len(items)} queued)"
+            out.append(f"## {title}{note}")
+        else:
+            out.append(f"## {title}{note} ({len(items)})")
         out.append("")
         for item in items:
             if key == "closed_recently":
                 out.append(f"  {item['key']:<10} {item['status']:<10} {item['title']}")
             else:
                 out.append(_line(item, show="days_late" if key == "overdue" else None))
+        out.append("")
+
+    pull = payload.get("pull") or {}
+    starved = pull.get("starved") or []
+    if starved:
+        out.append(f"## Lanes with room and nothing queued ({len(starved)})")
+        out.append("")
+        for s in starved:
+            lane = s["lane"] if s["lane"] != queue.NO_EPIC else "(no epic)"
+            head = f"  {lane:<10} {s['headroom']} slot(s) free"
+            if s["candidate"]:
+                c = s["candidate"]
+                out.append(f"{head} · {s['backlog_count']} in backlog, "
+                           f"top {c['key']} {c['priority']} {c['title']}")
+            else:
+                out.append(f"{head} · nothing in backlog either")
         out.append("")
 
     attention = payload.get("watches_needing_attention") or []
