@@ -132,10 +132,47 @@
   .meter.over > i { background: var(--critical); }
 
   /* ------------------------------------------------------------- board */
-  .board {
+  /* The board is a vertical stack of swimlanes; one lane per epic, plus a
+     trailing lane for issues with no parent. Flat mode renders a single
+     headerless lane, so both modes share one code path.
+     overflow-x lives on .board, not on the lane: a scrollbar per lane would
+     let lanes drift out of step and destroy the column alignment that makes
+     the grid readable. Every lane renders every status, so widths match. */
+  .board { display: grid; gap: 14px; overflow-x: auto; padding-bottom: 10px; }
+  .lane-cols {
     display: grid; grid-auto-flow: column; grid-auto-columns: minmax(248px, 1fr);
-    gap: 12px; align-items: start; overflow-x: auto; padding-bottom: 10px;
+    gap: 12px; align-items: start;
   }
+  .lane.collapsed .lane-cols { display: none; }
+  .lane-head {
+    display: flex; align-items: center; gap: 9px; padding: 2px 2px 8px;
+    cursor: pointer; user-select: none;
+  }
+  .lane-head:hover .lane-title { color: var(--ink); }
+  .lane-caret {
+    color: var(--ink-3); font-size: 10px; width: 10px; flex: none;
+    transition: transform .12s ease;
+  }
+  .lane.collapsed .lane-caret { transform: rotate(-90deg); }
+  .lane-key {
+    font: 600 11.5px/1 ui-monospace, Menlo, monospace; color: var(--ink-3);
+  }
+  .lane-title {
+    font-size: 12.5px; font-weight: 620; color: var(--ink-2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lane-open {
+    font-size: 11px; color: var(--ink-3); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; flex: none;
+  }
+  .lane-open:hover { color: var(--accent); border-color: var(--accent); }
+  .lane-stat {
+    margin-left: auto; flex: none; font-size: 11.5px; color: var(--ink-3);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .lane-stat b { font-weight: 600; color: var(--ink-2); }
+  .lane-stat .wip-over { color: var(--critical); }
+  .lane-rule { height: 1px; background: var(--line-soft); margin: 0 0 10px; }
   .col {
     background: var(--surface-2); border: 1px solid var(--line);
     border-radius: var(--r); display: flex; flex-direction: column;
@@ -278,7 +315,7 @@
   .empty { color: var(--ink-3); font-size: 11.5px; text-align: center; padding: 10px 2px; }
   .hidden { display: none !important; }
   @media (max-width: 680px) {
-    .board { grid-auto-flow: row; grid-auto-columns: auto; }
+    .lane-cols { grid-auto-flow: row; grid-auto-columns: auto; }
     input[type=search] { width: 140px; }
   }
 </style>
@@ -294,7 +331,8 @@
     <option value="p2">p2 medium</option><option value="p3">p3 low</option>
   </select>
   <label class="toggle"><input type="checkbox" id="fover"> Overdue</label>
-  <label class="toggle"><input type="checkbox" id="fdone" checked> Show done</label>
+  <label class="toggle"><input type="checkbox" id="fdone"> Show done</label>
+  <label class="toggle"><input type="checkbox" id="fepic" checked> Group by epic</label>
   <span class="spacer"></span>
   <span id="status" style="color:var(--ink-3);font-size:11.5px"></span>
   <button class="btn" id="refresh" title="Refresh (r)">Refresh</button>
@@ -462,11 +500,24 @@ function tile(label, value, unit, note, meter) {
   return t;
 }
 
+/* Keys that act as epics in the current view: a parent something visible points
+   at. Shared by the WIP count and the lane split so the two never disagree. */
+function epicKeys(issues) {
+  return new Set(issues.map(i => i.parent).filter(Boolean));
+}
+
 function renderKpis() {
   const box = $("#kpis"); box.textContent = "";
   const st = BOARD.stats;
-  const inProg = st.by_status.in_progress || 0;
   const limit = WF.wip_limit || 3;
+
+  /* Count work in flight, not containers. st.by_status.in_progress includes the
+     epics, and they sit in_progress for the life of the project -- four of them
+     pinned this tile permanently over the limit, so it signalled nothing. This
+     counts the same cards the lanes do, which is what the limit is about. */
+  const epics = epicKeys(BOARD.issues);
+  const inProg = BOARD.issues
+    .filter(i => i.status === "in_progress" && !epics.has(i.key)).length;
 
   const targets = Object.values(BOARD.targets).flat();
   const met = targets.filter(t => t.met).length;
@@ -479,7 +530,8 @@ function renderKpis() {
     tile("Open", st.open, null,
          `${st.by_status.backlog || 0} backlog · ${st.by_status.todo || 0} todo`),
     tile("In progress", inProg, `/ ${limit}`,
-         inProg > limit ? `${inProg - limit} over the WIP limit` : "within limit",
+         (inProg > limit ? `${inProg - limit} over the WIP limit` : "within limit")
+           + (epics.size ? ` · ${epics.size} epics not counted` : ""),
          { pct: (inProg / limit) * 100, over: inProg > limit }),
     tile("Targets met", targets.length ? `${met}/${targets.length}` : "—", null,
          targets.length ? `${targets.length - met} still short` : "no targets set",
@@ -515,8 +567,11 @@ function card(issue) {
   ];
   if (due && !closed) meta.push(el("span", { className: "due " + due.cls }, due.text));
   if (issue.assignee) meta.push(el("span", { className: "chip" }, "@" + issue.assignee));
-  if (issue.parent) meta.push(el("span", { className: "chip", title: "subtask of " + issue.parent },
-                                  "↳ " + issue.parent));
+  // In lane mode the parent is the lane header, so repeating it on every card
+  // is pure noise -- show the chip only when the board is flat.
+  if (issue.parent && !$("#fepic").checked)
+    meta.push(el("span", { className: "chip", title: "subtask of " + issue.parent },
+                 "↳ " + issue.parent));
   for (const l of issue.labels.slice(0, 3)) meta.push(el("span", { className: "chip" }, l));
 
   const node = el("div", {
@@ -553,7 +608,7 @@ function card(issue) {
     dragKey = issue.key; node.classList.add("dragging");
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", issue.key);
-    markTargets(issue.status);
+    markTargets(issue.status, node.closest(".lane"));
   });
   node.addEventListener("dragend", () => {
     dragKey = null; node.classList.remove("dragging"); clearTargets();
@@ -561,9 +616,13 @@ function card(issue) {
   return node;
 }
 
-function markTargets(from) {
+/* Drop targets are scoped to the dragged card's own lane. Lighting up every
+   lane's matching column implies dropping there would re-parent the issue,
+   which it does not -- a drop only ever changes status. */
+function markTargets(from, laneEl) {
   const ok = WF.transitions[from] || [];
-  for (const c of document.querySelectorAll(".col")) {
+  const scope = laneEl || document;
+  for (const c of scope.querySelectorAll(".col")) {
     c.classList.toggle("drop-ok", ok.includes(c.dataset.status));
     c.classList.toggle("drop-no", c.dataset.status !== from && !ok.includes(c.dataset.status));
   }
@@ -571,10 +630,81 @@ function markTargets(from) {
 const clearTargets = () => document.querySelectorAll(".col")
   .forEach(c => c.classList.remove("drop-ok", "drop-no"));
 
+/* ------------------------------------------------------------ swimlanes */
+const LANE_NONE = "__none__";              // sentinel: issues with no epic
+const collapsed = new Set(
+  JSON.parse(localStorage.getItem("tam.lanes.collapsed") || "[]"));
+const saveCollapsed = () => localStorage.setItem(
+  "tam.lanes.collapsed", JSON.stringify([...collapsed]));
+
+/* Split the visible issues into lanes.
+
+   A lane is an epic -- a parent that at least one visible issue points at.
+   The epic itself is deliberately NOT dealt into the columns: its status is an
+   aggregate of its children, so a container card in one column says nothing,
+   and four of them permanently pinned the in_progress count over the WIP limit.
+   It becomes the lane header instead.
+
+   A parent filtered out of the result set still gets a lane, keyed by its key
+   with no title, so searching never silently regroups its children. */
+function lanesOf(issues) {
+  const byKey = new Map(issues.map(i => [i.key, i]));
+  const parents = epicKeys(issues);
+
+  const lanes = new Map();
+  const laneFor = key => {
+    if (!lanes.has(key)) lanes.set(key, { key, epic: byKey.get(key) || null, issues: [] });
+    return lanes.get(key);
+  };
+
+  for (const i of issues) {
+    if (parents.has(i.key)) continue;            // an epic: header, not a card
+    laneFor(i.parent || LANE_NONE).issues.push(i);
+  }
+
+  // Epics first, in the order the API returned them; loose issues last.
+  const ordered = [];
+  for (const i of issues) if (parents.has(i.key) && lanes.has(i.key)) ordered.push(lanes.get(i.key));
+  for (const [key, lane] of lanes)
+    if (key !== LANE_NONE && !lane.epic) ordered.push(lane);   // parent not in view
+  if (lanes.has(LANE_NONE)) ordered.push(lanes.get(LANE_NONE));
+  return ordered;
+}
+
+function laneHead(lane, inProg) {
+  const over = inProg > WF.wip_limit;
+  const open = lane.issues.filter(i => !WF.closed_statuses.includes(i.status)).length;
+
+  const head = el("div", { className: "lane-head" },
+    el("span", { className: "lane-caret" }, "▼"),
+    lane.key === LANE_NONE
+      ? el("span", { className: "lane-title" }, "No epic")
+      : el("span", { className: "lane-key" }, lane.key),
+    lane.epic ? el("span", { className: "lane-title" }, lane.epic.title) : null,
+    lane.key !== LANE_NONE && lane.epic
+      ? el("a", { className: "lane-open", href: "#" + lane.key,
+                  title: "Open " + lane.key,
+                  onclick: ev => { ev.stopPropagation(); openDrawer(lane.key); } }, "open")
+      : null,
+    el("span", { className: "lane-stat" },
+      el("span", null, el("b", null, String(open)), " open"),
+      el("span", { className: over ? "wip-over" : "" },
+         el("b", null, String(inProg)), `/${WF.wip_limit} in progress`)));
+
+  head.addEventListener("click", () => {
+    if (collapsed.has(lane.key)) collapsed.delete(lane.key);
+    else collapsed.add(lane.key);
+    saveCollapsed();
+    render();
+  });
+  return head;
+}
+
 function render() {
   renderKpis();
   const board = $("#board"); board.textContent = "";
   const showClosed = $("#fdone").checked;
+  const grouped = $("#fepic").checked;
   const issues = BOARD.issues;
   const statuses = WF.statuses.filter(s => {
     if (!WF.closed_statuses.includes(s)) return true;
@@ -582,38 +712,61 @@ function render() {
     return s !== "cancelled" || issues.some(i => i.status === "cancelled");
   });
 
-  for (const status of statuses) {
-    const mine = issues.filter(i => i.status === status);
-    const col = el("div", { className: "col" });
-    col.dataset.status = status;
-    if (status === "in_progress" && mine.length > WF.wip_limit) col.classList.add("over-wip");
+  // Flat mode is one headerless lane, so both modes share the column code.
+  const lanes = grouped
+    ? lanesOf(issues)
+    : [{ key: LANE_NONE, epic: null, issues, headless: true }];
 
-    col.append(
-      el("div", { className: "col-head" },
-        el("span", { className: "col-title" }, status.replace("_", " ")),
-        el("span", { className: "count num" },
-           status === "in_progress" ? `${mine.length}/${WF.wip_limit}` : String(mine.length))),
-      (() => {
-        const b = el("div", { className: "col-body" });
-        if (!mine.length) b.append(el("div", { className: "empty" }, "—"));
-        for (const i of mine) b.append(card(i));
-        return b;
-      })());
+  for (const lane of lanes) {
+    const laneEl = el("div", { className: "lane" });
+    laneEl.dataset.lane = lane.key;
+    const inProg = lane.issues.filter(i => i.status === "in_progress").length;
 
-    col.addEventListener("dragover", ev => {
-      if (!dragKey) return;
-      const from = issues.find(i => i.key === dragKey);
-      if (from && (WF.transitions[from.status] || []).includes(status)) {
-        ev.preventDefault(); ev.dataTransfer.dropEffect = "move";
-      }
-    });
-    col.addEventListener("drop", ev => {
-      ev.preventDefault();
-      const key = dragKey || ev.dataTransfer.getData("text/plain");
-      clearTargets();
-      if (key) move(key, status);
-    });
-    board.append(col);
+    if (!lane.headless) {
+      if (collapsed.has(lane.key)) laneEl.classList.add("collapsed");
+      laneEl.append(laneHead(lane, inProg), el("div", { className: "lane-rule" }));
+    }
+
+    const cols = el("div", { className: "lane-cols" });
+    for (const status of statuses) {
+      const mine = lane.issues.filter(i => i.status === status);
+      const col = el("div", { className: "col" });
+      col.dataset.status = status;
+      if (status === "in_progress" && mine.length > WF.wip_limit) col.classList.add("over-wip");
+
+      col.append(
+        el("div", { className: "col-head" },
+          el("span", { className: "col-title" }, status.replace("_", " ")),
+          el("span", { className: "count num" },
+             status === "in_progress" ? `${mine.length}/${WF.wip_limit}` : String(mine.length))),
+        (() => {
+          const b = el("div", { className: "col-body" });
+          if (!mine.length) b.append(el("div", { className: "empty" }, "—"));
+          for (const i of mine) b.append(card(i));
+          return b;
+        })());
+
+      col.addEventListener("dragover", ev => {
+        if (!dragKey) return;
+        // Only the lane the card came from accepts it: a drop changes status,
+        // never the parent, so cross-lane drops would be a lie.
+        if (!col.closest(".lane")?.contains(document.querySelector(".card.dragging"))) return;
+        const from = issues.find(i => i.key === dragKey);
+        if (from && (WF.transitions[from.status] || []).includes(status)) {
+          ev.preventDefault(); ev.dataTransfer.dropEffect = "move";
+        }
+      });
+      col.addEventListener("drop", ev => {
+        ev.preventDefault();
+        const key = dragKey || ev.dataTransfer.getData("text/plain");
+        clearTargets();
+        if (key) move(key, status);
+      });
+      cols.append(col);
+    }
+
+    laneEl.append(cols);
+    board.append(laneEl);
   }
 }
 
@@ -965,6 +1118,8 @@ async function boot() {
   $("#refresh").onclick = () => load();
   $("#q").addEventListener("input", debounce(() => load(true), 250));
   for (const id of ["#fpri", "#fover", "#fdone"]) $(id).onchange = () => load(true);
+  // Grouping is a pure view concern -- no new data, so re-render rather than refetch.
+  $("#fepic").onchange = () => render();
   $("#scrim").onclick = closeDrawer;
   $("#new").onclick = () => {
     $("#newform").reset();
