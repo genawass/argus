@@ -278,6 +278,11 @@ class RemoteService:
                              params={"project": project} if project else None)
         return data
 
+    def next_up(self, wip_limit=None):
+        data, _ = self._call("GET", "/api/next",
+                             params={"wip_limit": wip_limit} if wip_limit else None)
+        return data
+
     # -- digest -----------------------------------------------------------
     def digest(self, date=None, write=False):
         params = {}

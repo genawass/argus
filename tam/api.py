@@ -372,7 +372,16 @@ def h_board(svc, m, params, body):
         "watches": watches, "targets": targets,
         "workflow": svc.workflow(),
         "stats": svc.stats(),
+        # The board renders the queue as a lane hint. It comes from the same
+        # call as the cards so the hint can never describe a different board.
+        "pull": svc.next_up(),
     }, {"count": len(issues)}
+
+
+def h_next_up(svc, m, params, body):
+    """The pull queue: todo, unblocked, ordered, gated on each lane's headroom."""
+    raw = (params.get("wip_limit") or [None])[0]
+    return 200, svc.next_up(wip_limit=int(raw) if raw not in (None, "") else None), None
 
 
 def h_providers(svc, m, params, body):
@@ -428,6 +437,7 @@ ROUTES = [
     ("GET", r"^/api/providers$", h_providers, True),
     ("GET", r"^/api/events$", h_recent_events, True),
     ("GET", r"^/api/board$", h_board, True),
+    ("GET", r"^/api/next$", h_next_up, True),
     ("GET", rf"^/api/issues/{KEY}/params$", h_list_params, True),
     ("POST", rf"^/api/issues/{KEY}/params$", h_set_params, True),
     ("DELETE", rf"^/api/issues/{KEY}/params$", h_remove_param, True),

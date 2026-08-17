@@ -11,7 +11,7 @@ import socket
 from .. import config as config_mod
 from .. import db as db_mod
 from ..errors import ConflictError
-from . import comments, events, issues, links, observe, projects, query
+from . import comments, events, issues, links, observe, projects, query, queue
 from .query import IssueFilter
 from .workflow import TRANSITIONS, allowed_from
 
@@ -140,6 +140,9 @@ class Service:
 
     def stats(self, project=None):
         return query.stats(self, project)
+
+    def next_up(self, wip_limit=None):
+        return queue.next_up(self, wip_limit)
 
     # -- digest ------------------------------------------------------------
     # Exposed on the service (not called as module functions from adapters) so
