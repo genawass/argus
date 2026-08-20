@@ -3,8 +3,8 @@
 The system as built. [`SPEC.md`](../SPEC.md) is the original pre-build spec and
 is kept for the record; where the two disagree, this file is correct.
 
-At a glance: 8,774 lines of Python, 225 tests, no third-party dependencies.
-5 tables of task data plus 4 of observation data, 40 HTTP endpoints,
+At a glance: 9,732 lines of Python, 260 tests, no third-party dependencies.
+12 application tables, 42 HTTP endpoints,
 19 MCP tools, 6 watch providers, 3 metric parsers, 3 systemd timers.
 
 ---

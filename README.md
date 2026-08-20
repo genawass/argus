@@ -432,6 +432,23 @@ unaffected. To automate the review later, add a second timer at 08:00 running
 
 One host serves; everyone else is an HTTP client.
 
+### Install agent guidance
+
+Install persistent TAM instructions for Codex, Claude Code, and Gemini CLI:
+
+```sh
+./deploy/install-agent-instructions.sh
+```
+
+The installer adds a managed block to `~/.codex/AGENTS.md`,
+`~/.claude/CLAUDE.md`, and `~/.gemini/GEMINI.md`. It preserves existing
+content, is safe to rerun after moving or updating the checkout, and makes TAM
+available to agents launched from any project. Remove only TAM's managed blocks
+with `./deploy/install-agent-instructions.sh --remove`.
+
+The owner-host service installer runs this automatically. On a client or
+developer machine, run it once after cloning TAM.
+
 ```
 worker-node02 (serving host)              any other node
   ~/.local/share/tam/data/tam.db          HTTP + bearer token
@@ -554,7 +571,7 @@ the API token against the original root — use `--home` to move everything.
 python3 -m unittest discover -s tests -t .
 ```
 
-238 tests, no dependencies, roughly twenty-five seconds. They cover the transition
+260 tests, no dependencies, roughly twenty-five seconds. They cover the transition
 matrix exhaustively (every declared move legal, every undeclared one refused),
 both guards, link pairing and cycle detection, every query filter, audit
 completeness, concurrent writers against one database, and adapter parity.
