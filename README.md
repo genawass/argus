@@ -571,7 +571,7 @@ the API token against the original root — use `--home` to move everything.
 python3 -m unittest discover -s tests -t .
 ```
 
-238 tests, no dependencies, roughly twenty-five seconds. They cover the transition
+260 tests, no dependencies, roughly twenty-five seconds. They cover the transition
 matrix exhaustively (every declared move legal, every undeclared one refused),
 both guards, link pairing and cycle detection, every query filter, audit
 completeness, concurrent writers against one database, and adapter parity.

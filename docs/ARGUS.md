@@ -215,5 +215,5 @@ tamapi POST /api/scan -d '{"issue":"TAM-23"}'         # probe watches now
 `GET /api/events?since=` is the cheap way to catch up on what changed while you
 were working, rather than re-reading the board.
 
-Full endpoint reference: [`docs/API.md`](docs/API.md) — 40 endpoints, generated
+Full endpoint reference: [`docs/API.md`](docs/API.md) — 42 endpoints, generated
 from the route table so it cannot drift.
