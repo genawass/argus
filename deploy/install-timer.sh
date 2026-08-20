@@ -42,3 +42,6 @@ if ! loginctl show-user "$(id -un)" -p Linger 2>/dev/null | grep -q 'Linger=yes'
     echo "note: lingering is off, so the timer only runs while you are logged in."
     echo "      enable it with:  sudo loginctl enable-linger $(id -un)"
 fi
+
+echo
+"$ROOT/deploy/install-agent-instructions.sh"
