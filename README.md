@@ -459,7 +459,8 @@ worker-node02 (serving host)              any other node
 ```
 
 **No TAM code is published to shared storage.** `/mnt/datasets/tam/env.sh`
-carries two variables and nothing else:
+carries the connection details, and `/mnt/datasets/tam/AGENTS.md` gives remote
+agents a small discovery bootstrap:
 
 ```sh
 source /mnt/datasets/tam/env.sh    # TAM_API_URL + TAM_API_TOKEN
@@ -473,10 +474,10 @@ want the `tam` CLI there, clone the repo and set `TAM_API_URL`; `--api URL`
 selects remote mode explicitly, and the token resolves from `TAM_API_TOKEN`,
 else `TAM_API_TOKEN_FILE`, else `$TAM_HOME/data/api_token`.
 
-Agent instructions are served too, rather than staged on the share:
-`GET /docs` lists `docs/*.md`, `GET /docs/ARGUS.md` returns one. A node reads
-its instructions from the same host that enforces them, so the two cannot
-disagree about which version is current.
+The shared `AGENTS.md` contains only enough information to find the API. Full
+agent instructions remain live: `GET /docs` lists `docs/*.md`, and
+`GET /docs/ARGUS.md` returns the operating guide. A node therefore reads its
+authoritative instructions from the same host that enforces them.
 
 ### Why the database is not on shared storage
 
@@ -517,11 +518,12 @@ move ownership permanently, stop the API on the old host, copy the file, and set
 | `~/dev/argus` | the code — a git checkout, on each host that runs it |
 | `$TAM_HOME` (`~/.local/share/tam`) | database, config, token, digests — local disk |
 | `/mnt/datasets/tam/env.sh` | `TAM_API_URL` + `TAM_API_TOKEN` for clients (from [`deploy/env.sh`](deploy/env.sh)) |
+| `/mnt/datasets/tam/AGENTS.md` | secret-free API discovery bootstrap (from [`deploy/AGENTS.md`](deploy/AGENTS.md)) |
 | `/mnt/datasets/tam/api_token` | the token clients read; rotate here |
 | `/mnt/datasets/tam/backups` | off-host snapshots, nightly |
 
-That is everything on shared storage: an address, a token, and snapshots. No
-code, no database, no documents.
+That is everything on shared storage: a bootstrap, an address, a token, and
+snapshots. No application code or live database.
 
 `.tam-env` in the checkout resolves `TAM_HOME` for `bin/tam`, `bin/tam-api` and
 `bin/tam-mcp` alike, so a bare cron line and an interactive shell address the

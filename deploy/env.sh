@@ -1,9 +1,9 @@
 # TAM environment -- source this on any node:
 #   source /mnt/datasets/tam/env.sh
 #
-# Deployed copy lives at /mnt/datasets/tam/env.sh. This is the only file TAM
-# puts on shared storage, and it is deliberately not code: it distributes an
-# address and a token, nothing else. Edit here, copy there.
+# Deployed copy lives at /mnt/datasets/tam/env.sh. Alongside it, AGENTS.md is a
+# secret-free bootstrap that points agents back to the live API instructions.
+# Neither file is application code. Edit their deploy/ copies, then copy them.
 #
 # There is no TAM code on shared storage. The database is local disk on the
 # serving host and every other node is an API client, so sourcing this does not
@@ -14,8 +14,9 @@
 #   curl -H "Authorization: Bearer $TAM_API_TOKEN" "$TAM_API_URL/docs/ARGUS.md"
 #   xdg-open "$TAM_API_URL/"               # the board UI, no install at all
 #
-# Agent instructions are served from /docs rather than staged next to this file,
-# so they cannot drift from the API that enforces them. GET /docs lists them.
+# AGENTS.md is only a discovery bootstrap. Full agent instructions are served
+# from /docs so they cannot drift from the API that enforces them. GET /docs
+# lists them.
 #
 # On the serving host itself, the API and the timers address the database
 # directly through TAM_HOME, which their systemd units set. Sourcing this file
