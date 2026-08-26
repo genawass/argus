@@ -68,8 +68,9 @@ a share, not a load-bearing rule. `TAM_ALLOW_FOREIGN_DB=1` lifts it.
 
 Every other node reaches the data through `tam-api` on the serving host. **No
 TAM code is published to shared storage**; `/mnt/datasets/tam/env.sh` carries
-`TAM_API_URL` and `TAM_API_TOKEN` and nothing else. A node needs an address and
-a token, not an install.
+`TAM_API_URL` and `TAM_API_TOKEN`, while `AGENTS.md` is a secret-free bootstrap
+to the live API instructions. A node needs an address and a token, not an
+install.
 
 Since local disk has no redundancy under it, `backup_dir` points off-host
 (`/mnt/datasets/tam/backups`). That is the only thing shared storage is now
