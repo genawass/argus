@@ -143,10 +143,11 @@ GET    /docs · /docs/{name}.md          agent instructions, served from docs/
 
 Query filters use the same names as the CLI flags. Errors map to
 `400` validation · `401` bad token · `404` not found · `409` conflict or
-transition denied. `GET /api/issues?brief=1` returns each issue without its
-body (key, title, status, priority, assignee, due date, parent, labels,
-`updated_at`) — for scanning many issues cheaply; the MCP `tam_list_issues`
-tool takes the same `brief` flag.
+transition denied. `GET /api/issues` is **brief by default** — each issue
+without its body (key, title, status, priority, assignee, due date, parent,
+labels, `updated_at`) so scanning many issues is cheap; pass `?brief=0` for the
+full issue. The MCP `tam_list_issues` tool is brief by default too (`brief:
+false` for full), and `tam issue list` takes `--full`.
 
 **It defaults to loopback, and this deployment does not.** A single node keeps
 `api_host: 127.0.0.1` and nothing is exposed. Serving the cluster means setting

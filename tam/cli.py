@@ -289,9 +289,14 @@ def cmd_issue_show(svc, args):
 
 
 def cmd_issue_list(svc, args):
-    issues = svc.list_issues(build_filter(args, svc))
+    # Brief by default: the table never showed the body, and --json is most
+    # often an agent scanning keys and titles. --full opts back into the whole
+    # issue. Passing brief through reaches the server in remote mode, so the
+    # body is not fetched only to be dropped.
+    brief = not getattr(args, "full", False)
+    issues = svc.list_issues(build_filter(args, svc), brief=brief)
     return Out(
-        [i.to_dict() for i in issues],
+        [i.to_dict(brief=brief) for i in issues],
         render_issue_list(issues, svc.config.timezone),
         {"count": len(issues)},
     )
@@ -828,7 +833,10 @@ def build_parser():
     p.add_argument("--links", action="store_true")
     p.add_argument("--all", action="store_true", help="comments, links and history")
 
-    add_filter_args(leaf(issue, "list", cmd_issue_list))
+    list_p = leaf(issue, "list", cmd_issue_list)
+    list_p.add_argument("--full", action="store_true",
+                        help="include the body and every field (default is brief)")
+    add_filter_args(list_p)
     add_filter_args(leaf(issue, "tree", cmd_tree,
                          help="parents with their subtasks nested"))
 
