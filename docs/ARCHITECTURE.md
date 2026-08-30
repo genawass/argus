@@ -229,6 +229,16 @@ covered by tests; do not add `Access-Control-Allow-Origin`.
 Provider credentials are named by environment variable (`token_env`), never
 stored in the database.
 
+Provider refs and paths are treated as shell **data**, never shell. Values
+interpolated into a `bash -lc` probe are `shlex.quote`d (not `json.dumps`d —
+bash still expands `$(…)` and backticks inside double quotes), and an `ssh`
+destination shaped like an option (`-oProxyCommand=…`) is refused. This is not
+redundant with the token boundary: some probe input is not the token holder's —
+a Slurm `StdOut=` path comes from whoever submitted the job — so `process`,
+`path` and log-tailing must not become the command-execution primitive that the
+`command` provider deliberately is. Covered by tests; keep untrusted values out
+of shell strings.
+
 This is a private-network posture: plain HTTP, one shared secret, no rate
 limiting, no per-caller identity.
 

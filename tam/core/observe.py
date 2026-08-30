@@ -138,6 +138,15 @@ def record_metric(ctx, key, name, value, step=None, source=None, at=None):
     except (TypeError, ValueError):
         raise ValidationError(f"metric value must be numeric, got {value!r}",
                               field="value")
+    # Step is an epoch/iteration counter, so it must be an integer. Coercing on
+    # write also keeps a non-numeric value from reaching the board, which
+    # interpolates it straight into a tooltip's innerHTML.
+    if step is not None:
+        try:
+            step = int(step)
+        except (TypeError, ValueError):
+            raise ValidationError(f"metric step must be an integer, got {step!r}",
+                                  field="step")
     name = (name or "").strip()
     if not name:
         raise ValidationError("metric needs a name", field="name")

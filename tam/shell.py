@@ -37,5 +37,10 @@ def sh(script, timeout=DEFAULT_TIMEOUT):
 def ssh(host, script, timeout=DEFAULT_TIMEOUT):
     if not host:
         return sh(script, timeout=timeout)
+    # A host beginning with '-' would be read by ssh as an option, not a
+    # destination: `-oProxyCommand=...` turns a "read-only" probe into local
+    # command execution. Reject it rather than pass it through.
+    if host.startswith("-"):
+        return 1, "", f"refusing suspicious ssh host {host!r}"
     return run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
-                host, script], timeout=timeout)
+                "--", host, script], timeout=timeout)
