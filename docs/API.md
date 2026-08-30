@@ -126,7 +126,7 @@ The token is generated at `tam init` with mode 600. There is one shared token: i
 
 Unknown filter names are rejected with `400 validation`.
 
-`GET /api/issues?brief=1` returns a reduced projection of each issue — key, title, status, priority, assignee, due date, parent, labels and `updated_at`, without the body — for callers scanning many issues rather than reading them. The MCP `tam_list_issues` tool takes the same `brief` flag.
+`GET /api/issues` returns a **brief** projection of each issue by default — key, title, status, priority, assignee, due date, parent, labels and `updated_at`, without the body — because the common caller is scanning many issues, not reading them. Pass `?brief=0` (or `false`/`no`/`off`) for the full issue. The MCP `tam_list_issues` tool is brief by default too (`brief: false` for full); the `tam issue list` CLI takes `--full`.
 
 ## Served outside the JSON API
 

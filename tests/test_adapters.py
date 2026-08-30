@@ -54,6 +54,13 @@ class TestCli(CliMixin, TamTestCase):
         self.assertFalse(out["ok"])
         self.assertEqual(out["error"]["code"], "not_found")
 
+    def test_list_json_is_brief_by_default_full_on_flag(self):
+        self.run_json("issue", "create", "-t", "described", "-b", "the long body")
+        brief = self.run_json("issue", "list")["data"][0]
+        self.assertNotIn("body", brief)
+        full = self.run_json("issue", "list", "--full")["data"][0]
+        self.assertEqual(full["body"], "the long body")
+
     def test_relative_dates_are_expanded(self):
         out = self.run_json("issue", "create", "-t", "soon", "-d", "+2d")
         self.assertRegex(out["data"]["due_date"], r"^\d{4}-\d{2}-\d{2}$")
@@ -238,15 +245,21 @@ class TestHttp(HttpMixin, TamTestCase):
         self.assertEqual(status, 400)
         self.assertIn("nonsense", body["error"]["message"])
 
-    def test_brief_projection_drops_the_body(self):
+    def test_listing_is_brief_by_default(self):
         self.http("POST", "/api/issues",
                   {"title": "with a body", "body": "a long description"})
-        _, full = self.http("GET", "/api/issues")
-        self.assertIn("body", full["data"][0])
-        status, brief = self.http("GET", "/api/issues?brief=1")
+        status, brief = self.http("GET", "/api/issues")
         self.assertEqual(status, 200)
         self.assertNotIn("body", brief["data"][0])
         self.assertEqual(brief["data"][0]["title"], "with a body")
+
+    def test_brief_can_be_turned_off_for_the_full_issue(self):
+        self.http("POST", "/api/issues",
+                  {"title": "with a body", "body": "a long description"})
+        for off in ("0", "false", "no", "off"):
+            _, full = self.http("GET", f"/api/issues?brief={off}")
+            self.assertEqual(full["data"][0]["body"], "a long description",
+                             f"brief={off} should return the body")
 
     def test_error_statuses_map_correctly(self):
         self.assertEqual(self.http("GET", "/api/issues/TAM-999")[0], 404)
@@ -377,6 +390,14 @@ class TestMcp(McpMixin, TamTestCase):
                                {"key": key, "history": True})
         self.assertEqual(fetched["title"], "Via MCP")
         self.assertTrue(fetched["history"])
+
+    def test_list_is_brief_by_default_full_on_request(self):
+        self.call(self.server, "tam_create_issue",
+                  {"title": "described", "body": "the long body"})
+        _, brief = self.call(self.server, "tam_list_issues", {})
+        self.assertNotIn("body", brief["issues"][0])
+        _, full = self.call(self.server, "tam_list_issues", {"brief": False})
+        self.assertEqual(full["issues"][0]["body"], "the long body")
 
     def test_domain_errors_surface_as_tool_errors(self):
         is_error, payload = self.call(self.server, "tam_get_issue", {"key": "TAM-999"})

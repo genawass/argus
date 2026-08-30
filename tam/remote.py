@@ -260,11 +260,16 @@ class RemoteService:
                 params[name] = value
         return params
 
-    def list_issues(self, f=None, **kw):
+    def list_issues(self, f=None, brief=None, **kw):
         from .core.query import IssueFilter
         f = f or IssueFilter(**kw)
         f.validate()
-        data, _ = self._call("GET", "/api/issues", params=self._filter_params(f))
+        params = self._filter_params(f)
+        # Forward the projection so --full actually fetches the body over the
+        # wire; the server is brief by default when the param is absent.
+        if brief is not None:
+            params["brief"] = "1" if brief else "0"
+        data, _ = self._call("GET", "/api/issues", params=params)
         return [Issue.from_dict(i) for i in data]
 
     def count_issues(self, f=None, **kw):

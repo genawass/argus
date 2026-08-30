@@ -75,10 +75,15 @@ def h_create_project(svc, m, params, body):
 def h_list_issues(svc, m, params, body):
     """Search and filter issues. Closed excluded unless asked for.
 
-    ?brief=1 returns a reduced projection (no body) for callers -- agents
-    especially -- that are scanning keys and titles, not reading descriptions.
+    The listing is brief by default -- a reduced projection without the body --
+    because the common caller is scanning keys and titles, and an agent pulling
+    every description into its context is the expensive case. Pass brief=0
+    (or false/no/off) to get the full issue, body included.
     """
-    brief = params.get("brief") == ["1"]
+    raw = params.get("brief")
+    brief = True
+    if raw:
+        brief = str(raw[-1]).strip().lower() not in ("0", "false", "no", "off")
     filter_params = {k: v for k, v in params.items() if k != "brief"}
     f = filter_from_params(filter_params, svc.config.timezone)
     issues = svc.list_issues(f)
