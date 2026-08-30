@@ -238,6 +238,16 @@ class TestHttp(HttpMixin, TamTestCase):
         self.assertEqual(status, 400)
         self.assertIn("nonsense", body["error"]["message"])
 
+    def test_brief_projection_drops_the_body(self):
+        self.http("POST", "/api/issues",
+                  {"title": "with a body", "body": "a long description"})
+        _, full = self.http("GET", "/api/issues")
+        self.assertIn("body", full["data"][0])
+        status, brief = self.http("GET", "/api/issues?brief=1")
+        self.assertEqual(status, 200)
+        self.assertNotIn("body", brief["data"][0])
+        self.assertEqual(brief["data"][0]["title"], "with a body")
+
     def test_error_statuses_map_correctly(self):
         self.assertEqual(self.http("GET", "/api/issues/TAM-999")[0], 404)
         self.assertEqual(self.http("GET", "/nope")[0], 404)

@@ -80,6 +80,18 @@ class TestMetrics(TamTestCase):
         with self.assertRaises(ValidationError):
             self.svc.record_metric(issue.key, "recall", "high")
 
+    def test_non_integer_step_rejected(self):
+        """Step reaches the board's tooltip; keep it an integer, not markup."""
+        issue = self.mk("m")
+        with self.assertRaises(ValidationError):
+            self.svc.record_metric(issue.key, "recall", 0.8,
+                                   step="<img src=x onerror=alert(1)>")
+
+    def test_numeric_string_step_is_coerced(self):
+        issue = self.mk("m")
+        self.svc.record_metric(issue.key, "recall", 0.8, step="7")
+        self.assertEqual(self.svc.list_metrics(issue.key)[0]["step"], 7)
+
     def test_latest_metrics(self):
         issue = self.mk("m")
         self.svc.record_metric(issue.key, "recall", 0.7, step=1)

@@ -111,6 +111,11 @@ def build():
                         ("integers", INT_FIELDS)):
         out.append(f"- **{name}**: " + ", ".join(f"`{f}`" for f in group))
     out.append("\nUnknown filter names are rejected with `400 validation`.\n")
+    out.append("`GET /api/issues?brief=1` returns a reduced projection of each "
+               "issue — key, title, status, priority, assignee, due date, "
+               "parent, labels and `updated_at`, without the body — for callers "
+               "scanning many issues rather than reading them. The MCP "
+               "`tam_list_issues` tool takes the same `brief` flag.\n")
 
     # Served outside the route table, so the generator cannot see them: the
     # board is HTML with the token injected, and /docs streams files rather

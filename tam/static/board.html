@@ -920,9 +920,14 @@ function metricChart(points, target, name) {
     cross.setAttribute("opacity", .5);
     dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(p.value));
     dot.setAttribute("opacity", 1);
-    tip.innerHTML = `<b>${fmt(p.value)}</b>` +
-      (p.step != null ? ` · step ${p.step}` : "") +
-      `<br><span style="color:var(--ink-3)">${(p.at || "").slice(0, 16).replace("T", " ")}</span>`;
+    // Built from text nodes, not innerHTML: p.step and p.at are server data
+    // but need not be trusted as markup.
+    tip.textContent = "";
+    tip.append(el("b", {}, fmt(p.value)));
+    if (p.step != null) tip.append(` · step ${p.step}`);
+    tip.append(el("br"),
+      el("span", { style: "color:var(--ink-3)" },
+         (p.at || "").slice(0, 16).replace("T", " ")));
     tip.classList.add("on");
     tip.style.left = Math.min(r.width - 130, Math.max(0, (x(i) / W) * r.width - 55)) + "px";
     tip.style.top = ((y(p.value) / H) * r.height - 52) + "px";

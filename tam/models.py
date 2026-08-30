@@ -195,7 +195,24 @@ class Issue:
     def is_open(self):
         return self.status in OPEN_STATUSES
 
-    def to_dict(self):
+    def to_dict(self, brief=False):
+        """Serialise for the API. `brief` drops the fields a list view rarely
+        needs -- the body most of all -- so an agent scanning many issues does
+        not pull every description into its context window."""
+        if brief:
+            return {
+                "key": self.key,
+                "project": self.project_key,
+                "type": self.type,
+                "title": self.title,
+                "status": self.status,
+                "priority": self.priority,
+                "assignee": self.assignee,
+                "due_date": self.due_date,
+                "parent": self.parent_key,
+                "labels": list(self.labels),
+                "updated_at": self.updated_at,
+            }
         return {
             "key": self.key,
             "project": self.project_key,

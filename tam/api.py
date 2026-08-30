@@ -73,10 +73,16 @@ def h_create_project(svc, m, params, body):
 
 
 def h_list_issues(svc, m, params, body):
-    """Search and filter issues. Closed excluded unless asked for."""
-    f = filter_from_params(params, svc.config.timezone)
+    """Search and filter issues. Closed excluded unless asked for.
+
+    ?brief=1 returns a reduced projection (no body) for callers -- agents
+    especially -- that are scanning keys and titles, not reading descriptions.
+    """
+    brief = params.get("brief") == ["1"]
+    filter_params = {k: v for k, v in params.items() if k != "brief"}
+    f = filter_from_params(filter_params, svc.config.timezone)
     issues = svc.list_issues(f)
-    return 200, [i.to_dict() for i in issues], {"count": len(issues)}
+    return 200, [i.to_dict(brief=brief) for i in issues], {"count": len(issues)}
 
 
 def h_create_issue(svc, m, params, body):
@@ -592,10 +598,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(status, payload)
             except TamError as err:
                 return self._send(err.http_status, {"ok": False, "error": err.to_dict()})
-            except Exception as exc:  # noqa: BLE001 - never leak a traceback to the client
+            except Exception as exc:  # noqa: BLE001 - never leak internals to the client
+                # The message can carry a path, a query fragment or a driver
+                # detail, so it is logged server-side and never returned.
                 sys.stderr.write(f"unhandled: {exc!r}\n")
                 return self._send(500, {"ok": False, "error": {
-                    "code": "internal", "message": str(exc)}})
+                    "code": "internal", "message": "internal server error"}})
 
         if matched_path:
             return self._send(405, {"ok": False, "error": {

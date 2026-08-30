@@ -56,6 +56,8 @@ FILTER_PROPS = {
     "order": _enum(["asc", "desc"], "sort direction"),
     "limit": {"type": "integer"},
     "offset": {"type": "integer"},
+    "brief": {"type": "boolean",
+              "description": "return a reduced projection (no body) to save tokens"},
 }
 
 
@@ -72,8 +74,11 @@ def t_create_issue(svc, a):
 
 
 def t_list_issues(svc, a):
-    issues = svc.list_issues(filter_from_params(dict(a), svc.config.timezone))
-    return {"count": len(issues), "issues": [i.to_dict() for i in issues]}
+    args = dict(a)
+    brief = bool(args.pop("brief", False))
+    issues = svc.list_issues(filter_from_params(args, svc.config.timezone))
+    return {"count": len(issues),
+            "issues": [i.to_dict(brief=brief) for i in issues]}
 
 
 def t_get_issue(svc, a):

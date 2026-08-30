@@ -117,6 +117,37 @@ class TestShellDecoding(TamTestCase):
         self.assertAlmostEqual(obs.metrics["recall"], 0.80)
 
 
+class TestShellInjection(TamTestCase):
+    """A ref or path is data, not shell. The generic `command` provider runs
+    arbitrary commands on purpose; `process`, `path` and log-tailing must not.
+    """
+
+    def test_a_malicious_path_ref_does_not_execute(self):
+        sentinel = self.root / "pwned"
+        # $(...) inside the old json.dumps quoting would have run this.
+        ref = f"/definitely/missing$(touch {sentinel})"
+        obs = providers.get("path").probe({"ref": ref, "host": None, "config": {}})
+        self.assertEqual(obs.state, providers.MISSING)
+        self.assertFalse(sentinel.exists(), "command substitution executed")
+
+    def test_a_malicious_process_ref_does_not_execute(self):
+        sentinel = self.root / "pwned-proc"
+        ref = f"$(touch {sentinel})"
+        providers.get("process").probe({"ref": ref, "host": None, "config": {}})
+        self.assertFalse(sentinel.exists(), "command substitution executed")
+
+    def test_a_malicious_log_path_does_not_execute(self):
+        from tam.providers.builtin import _read_text
+        sentinel = self.root / "pwned-log"
+        _read_text(f"/missing$(touch {sentinel})")
+        self.assertFalse(sentinel.exists(), "command substitution executed")
+
+    def test_ssh_refuses_an_option_shaped_host(self):
+        rc, out, err = shell.ssh("-oProxyCommand=touch /tmp/x", "true")
+        self.assertEqual(rc, 1)
+        self.assertIn("suspicious", err)
+
+
 class TestCommandProvider(TamTestCase):
     def probe(self, ref, config=None, rc=0, out=""):
         with mock.patch.object(shell, "run", return_value=(rc, out, "")):

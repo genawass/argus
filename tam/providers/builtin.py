@@ -9,6 +9,7 @@ than code.
 import json
 import os
 import re
+import shlex
 import shutil
 import urllib.error
 import urllib.request
@@ -21,7 +22,12 @@ from . import (FAILED, MISSING, PENDING, PRESENT, RUNNING, STOPPED, SUCCEEDED,
 
 def _read_text(path, host=None, cap=400_000, lines=4000):
     """Tail a file, locally or over ssh, bounded in both bytes and lines."""
-    script = f"tail -c {cap} {json.dumps(path)} 2>/dev/null | tail -n {lines}"
+    # shlex.quote, not json.dumps: json produces a double-quoted string, and
+    # bash still expands $(...), backticks and $VAR inside double quotes. The
+    # path can come from an untrusted source (a Slurm StdOut= belonging to
+    # another user's job), so anything short of single-quote quoting is a shell
+    # injection into the host running the scan.
+    script = f"tail -c {cap} {shlex.quote(path)} 2>/dev/null | tail -n {lines}"
     rc, out, _ = ssh(host, script) if host else sh(script)
     return out if (rc == 0 or out) else ""
 
@@ -131,7 +137,7 @@ class ProcessProvider(Provider):
 
     def probe(self, watch):
         script = (f"ps -eo pid,etime,pcpu,rss,args | grep -v grep | "
-                  f"grep -F -- {json.dumps(watch['ref'])} | head -3")
+                  f"grep -F -- {shlex.quote(watch['ref'])} | head -3")
         rc, out, err = ssh(watch.get("host"), script)
         if "Permission denied" in (err or "") or "Could not resolve" in (err or ""):
             return Observation(UNREACHABLE,
@@ -156,7 +162,7 @@ class PathProvider(Provider):
 
     def probe(self, watch):
         ref = watch["ref"]
-        script = (f"p={json.dumps(ref)}; if [ -e \"$p\" ]; then "
+        script = (f"p={shlex.quote(ref)}; if [ -e \"$p\" ]; then "
                   f"n=$(find \"$p\" -type f 2>/dev/null | wc -l); "
                   f"m=$(find \"$p\" -type f -printf '%T@\\n' 2>/dev/null "
                   f"| sort -rn | head -1); echo \"$n|$m\"; "
