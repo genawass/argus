@@ -2,7 +2,13 @@
 Description=Probe watched jobs every 15 minutes
 
 [Timer]
+# OnBootSec counts from MACHINE boot. A --user manager that starts later (login,
+# linger after a slow boot) finds it already elapsed, and OnUnitActiveSec then
+# never fires because the service has not run once -- the scan stays dead until
+# started by hand (seen 2026-10-12 after a node02 reboot). OnStartupSec counts
+# from the user manager's own start, so one of the two always arms the cycle.
 OnBootSec=3min
+OnStartupSec=3min
 OnUnitActiveSec=15min
 Persistent=true
 Unit=tam-scan.service

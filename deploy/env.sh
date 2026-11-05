@@ -26,7 +26,7 @@
 # Failover: this file is the one place the address is written, so promoting a
 # standby is an edit here plus a re-source on each node.
 
-export TAM_API_URL="http://192.168.10.184:8787"
+export TAM_API_URL="http://worker-node02:8787"
 
 # The token is a shared-storage artifact rather than a value baked in here, so
 # rotating it is a one-file change that every node picks up on next source.

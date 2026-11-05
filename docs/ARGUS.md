@@ -29,7 +29,7 @@ in the workspace so each agent gets its own identity. If you set nothing, writes
 // .vscode/settings.json  — one actor per repo
 {
   "terminal.integrated.env.linux": {
-    "TAM_API_URL": "http://192.168.10.184:8787",
+    "TAM_API_URL": "http://worker-node02:8787",
     "TAM_ACTOR": "navy-agent"
   }
 }
