@@ -259,13 +259,19 @@ TOOLS = [
     {
         "name": "tam_transition_issue",
         "description": ("Change an issue's status. Moving to blocked requires a "
-                        "reason; closing a parent with open subtasks requires force."),
+                        "reason; closing a parent with open subtasks requires force. "
+                        "Moving backward (in_progress->todo, review->in_progress, "
+                        "done->in_progress) should carry a reason; one without is "
+                        "flagged in the digest. Waiting on a human is review or "
+                        "blocked, not todo."),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "key": STR,
                 "status": _enum(STATUSES, "target status"),
-                "reason": STR,
+                "reason": {"type": "string",
+                           "description": "required for blocked; expected on any "
+                                          "move backward"},
                 "force": {"type": "boolean",
                           "description": "close over open subtasks"},
             },

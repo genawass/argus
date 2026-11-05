@@ -175,6 +175,17 @@ tamapi POST /api/issues/TAM-23/transition \
 
 If you are abandoning rather than finishing, move it back to `todo` and say why.
 
+**Every move backward takes a `reason`.** That means `in_progress`→`todo`,
+`review`→`in_progress` (sent back), and reopening from `done`. Without one the
+move is still accepted, but it is stamped `[no reason given]` and listed in the
+daily digest under "Moves back without a reason". Say what happened: *"waiting
+on the user to pick the threshold"*, *"review found the validation split leaks"*.
+
+**Waiting on a human is not a move back.** If the deliverable is ready for them,
+move to `review`. If you are stuck until they decide something, move to
+`blocked` with that as the reason. `todo` means nobody is working on it and
+anyone may pick it up, which is not true while you wait.
+
 ---
 
 ## Rules
@@ -200,7 +211,15 @@ board rots.
 subtasks needs `force`, and the fact that it was forced is recorded.
 
 **Report negative results.** An experiment that did not work is information. It
-belongs in the issue, with the numbers.
+belongs in the issue, with the numbers. When the run was sound and the
+hypothesis simply failed, close the issue as normal and add the label
+`result/negative`: the digest marks it, and rework statistics count it as a
+result rather than as a task that bounced.
+
+**A rollup never moves status backward.** Reconciling a parent from its children
+(an epic summary, a capability rollup) may comment and link. It must not move
+the parent, or a child, to an earlier status; a parent reads as `in_progress`
+because its children are, and moving it to `todo` makes the board lie.
 
 ---
 

@@ -12,7 +12,15 @@ from .clock import parse_date, shift, today, utcnow
 from . import providers
 from .core import IssueFilter
 from .core import queue
+from .core.workflow import BACKWARD_MOVES, NO_REASON
 from .db import tx
+from .models import NEGATIVE_LABEL
+
+# Human prompts per issue come from session transcripts, which the digest host
+# does not have; tools/session_analysis/publish_prompt_counts.py records them as
+# this metric. An issue needing this many prompts is worth a look.
+STEERING_METRIC = "human_prompts"
+STEERING_MIN = 5
 
 SECTION_TITLES = [
     ("overdue", "Overdue"),
@@ -93,6 +101,8 @@ def build(svc, run_date=None):
     previous = previous_run(svc, run_date)
     since = previous["generated_at"] if previous else None
     closed_recently = _closed_since(svc, since or (run_date + "T00:00:00Z"))
+    moves_back = _unexplained_moves(svc, since or (shift(run_date, -7) + "T00:00:00Z"))
+    steering = _steering(svc)
 
     counts = svc.stats()
 
@@ -126,6 +136,8 @@ def build(svc, run_date=None):
                 "over": wip > svc.config.wip_limit},
         "stale_days": svc.config.stale_days,
         "targets_unmet": targets,
+        "moves_back_unexplained": moves_back,
+        "steering": steering,
         "watches": watches,
         "watches_needing_attention": attention,
         "deltas": _deltas(counts, previous),
@@ -137,12 +149,50 @@ def build(svc, run_date=None):
 
 def _closed_since(svc, since):
     rows = svc.conn.execute(
-        "SELECT i.key, i.title, i.status, i.priority, i.closed_at "
+        "SELECT i.key, i.title, i.status, i.priority, i.closed_at, EXISTS("
+        "  SELECT 1 FROM issue_label il JOIN label l ON l.id = il.label_id"
+        "  WHERE il.issue_id = i.id AND l.name = ?) AS negative "
         "FROM issue i WHERE i.closed_at IS NOT NULL AND i.closed_at >= ? "
         "ORDER BY i.closed_at DESC LIMIT 50",
-        (since,),
+        (NEGATIVE_LABEL, since),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [{**dict(r), "negative": bool(r["negative"])} for r in rows]
+
+
+def _unexplained_moves(svc, since):
+    """Backward moves made since `since` that carry no reason (see workflow.py)."""
+    rows = svc.conn.execute(
+        "SELECT issue_key, actor, old_value, new_value, at FROM event "
+        "WHERE kind='transitioned' AND field='status' AND note=? AND at >= ? "
+        "ORDER BY at DESC LIMIT 100",
+        (NO_REASON, since),
+    ).fetchall()
+    return [
+        {"issue": r["issue_key"], "actor": r["actor"], "from": r["old_value"],
+         "to": r["new_value"], "at": r["at"]}
+        for r in rows if (r["old_value"], r["new_value"]) in BACKWARD_MOVES
+    ]
+
+
+def _steering(svc, limit=10):
+    """Open leaf issues whose latest human_prompts metric is at or over the threshold.
+
+    Containers are excluded, as they are from WIP: an epic's working window spans
+    every child's sessions, so a large count there says nothing about steering.
+    """
+    containers = queue.container_keys(svc)
+    rows = svc.conn.execute(
+        "SELECT key, title, status, priority, value, at FROM ("
+        "  SELECT i.key, i.title, i.status, i.priority, m.value, m.at, ROW_NUMBER() OVER ("
+        "    PARTITION BY i.id ORDER BY m.at DESC, m.id DESC) AS rn "
+        "  FROM metric m JOIN issue i ON i.id = m.issue_id "
+        "  WHERE m.name = ? AND i.status NOT IN ('done','cancelled')"
+        ") WHERE rn = 1 AND value >= ? ORDER BY value DESC, key LIMIT ?",
+        (STEERING_METRIC, STEERING_MIN, limit + len(containers)),
+    ).fetchall()
+    return [{"key": r["key"], "title": r["title"], "status": r["status"],
+             "priority": r["priority"], "prompts": int(r["value"]), "at": r["at"]}
+            for r in rows if r["key"] not in containers][:limit]
 
 
 def _deltas(counts, previous):
@@ -166,6 +216,8 @@ def _summary(payload):
             bits.append(f"{len(s[key])} {label}")
     if payload.get("watches_needing_attention"):
         bits.append(f"{len(payload['watches_needing_attention'])} job(s) stopped")
+    if payload.get("moves_back_unexplained"):
+        bits.append(f"{len(payload['moves_back_unexplained'])} move(s) back without a reason")
     return ", ".join(bits) or "nothing needs attention"
 
 
@@ -283,7 +335,8 @@ def render_markdown(payload):
         out.append("")
         for item in items:
             if key == "closed_recently":
-                out.append(f"  {item['key']:<10} {item['status']:<10} {item['title']}")
+                mark = "  [negative result]" if item.get("negative") else ""
+                out.append(f"  {item['key']:<10} {item['status']:<10} {item['title']}{mark}")
             else:
                 out.append(_line(item, show="days_late" if key == "overdue" else None))
         out.append("")
@@ -321,6 +374,23 @@ def render_markdown(payload):
             gap = "" if t["gap"] in (None, 0.0) else f"  (gap {t['gap']:+.4f})"
             out.append(f"  {t['issue']:<10} {t['metric']:<12} "
                        f"{t['op']} {t['value']}   actual {actual}{gap}")
+        out.append("")
+
+    back = payload.get("moves_back_unexplained") or []
+    if back:
+        out.append(f"## Moves back without a reason ({len(back)})")
+        out.append("")
+        out.append("  Waiting on a human is `review` or `blocked` with a reason, not `todo`.")
+        for m in back:
+            out.append(f"  {m['issue']:<10} {m['from']}->{m['to']}  by {m['actor']}  {m['at']}")
+        out.append("")
+
+    steering = payload.get("steering") or []
+    if steering:
+        out.append(f"## Most steered open issues ({len(steering)})")
+        out.append("")
+        for s in steering:
+            out.append(f"  {s['key']:<10} {s['prompts']:>3} prompts  {s['status']:<11} {s['title']}")
         out.append("")
 
     wip = payload["wip"]
