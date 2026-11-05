@@ -18,7 +18,7 @@ from ..models import (
     validate_type,
 )
 from . import events, projects
-from .workflow import check_transition, closes
+from .workflow import NO_REASON, check_transition, closes, is_backward
 
 UNSET = object()
 
@@ -292,6 +292,8 @@ def transition(ctx, key, status, reason=None, force=False, actor=None):
             (status, closed_at, now, row["id"]),
         )
         note = reason
+        if is_backward(old, status) and not (reason or "").strip():
+            note = NO_REASON
         if force and status == "done":
             note = ((reason + " ") if reason else "") + "[forced over open subtasks]"
         events.record(

@@ -19,6 +19,24 @@ TRANSITIONS = {
 }
 
 
+# Moves that undo progress: the work was handed back, abandoned, or reopened.
+# They are legal, and a reason is expected, but it is not enforced: agents that
+# predate this rule would start failing. Instead a move made without one is
+# stamped NO_REASON in its audit note, so the digest can list them and the
+# habit can be fixed before it is made a hard rule. (A session analysis found
+# many "reworked" issues were really in_progress->todo while waiting on a human.)
+BACKWARD_MOVES = frozenset({
+    ("in_progress", "todo"),
+    ("review", "in_progress"),
+    ("done", "in_progress"),
+})
+NO_REASON = "[no reason given]"
+
+
+def is_backward(old, new):
+    return (old, new) in BACKWARD_MOVES
+
+
 def allowed_from(status):
     return sorted(TRANSITIONS.get(status, set()))
 

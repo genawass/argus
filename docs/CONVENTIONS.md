@@ -130,10 +130,51 @@ answerable.
 
 ---
 
-## 6. Quick reference
+## 6. Waiting, reopening, and negative results
+
+Three recurring ways the board misreports effort. A 2026-11-05 analysis of 400
+issues found that a large share of apparent rework was bookkeeping, not
+difficulty (`tools/session_analysis` reproduces it).
+
+- **Waiting on a human is `review` or `blocked`, never `todo`.** `todo` means
+  "decided, not started, anyone may take it". An agent that parks its issue
+  there while it waits for a decision makes finished-or-stalled work look like
+  rework, and puts a claimed issue back in the pull queue.
+- **Every move backward carries a reason.** It is not enforced; a move without
+  one is stamped `[no reason given]` and listed in the digest. Make it a hard
+  rule only once agents have had time to adapt.
+- **A sound run that failed is a result, not rework.** Close it normally and
+  label it `result/negative`. The digest marks it and the analysis tooling counts
+  it separately.
+
+Parents are not touched by any of this: a rollup comments, it does not move
+status (see `ARGUS.md`).
+
+### No mandatory spec template
+
+Considered and rejected. Across 289 issues, body length, headings, acceptance
+wording, non-goals and references to prior work did not separate tasks that
+converged from tasks that struggled; the struggling ones had *longer*, more
+detailed bodies, probably because hard tasks attract long specs. The one weak
+hint (not significant after allowing for the number of things tested) was that
+issues bundling several deliverables struggled more, which is the existing
+advice: split them. Do not add a template on this evidence.
+
+### Steering signal
+
+`tools/session_analysis/publish_prompt_counts.py` records how many human prompts
+each issue took, from session transcripts, as the `human_prompts` metric. The
+digest lists open leaf issues at five or more under "Most steered open issues".
+Read it as "worth a look": a session steering several issues counts for each.
+
+---
+
+## 7. Quick reference
 
 - Artifact → `task`. Decision → `spike`. Behaviour change → `bug`. Obligation → `chore`.
 - A threshold on its own → a **target**, on the issue it judges.
 - Has children → container. Don't work it, don't count it.
 - A `spike` is done when its answer is **written on the issue**.
 - If you cannot say what closes an issue, it is not ready to be `in_progress`.
+- Waiting on a human → `review` or `blocked`. Moving backward → give a reason.
+- Sound run, hypothesis failed → close it, label `result/negative`.

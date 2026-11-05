@@ -857,7 +857,8 @@ def build_parser():
     p = leaf(issue, "move", cmd_issue_move, help="change status")
     p.add_argument("key")
     p.add_argument("status", choices=STATUSES)
-    p.add_argument("--reason", help="required when moving to blocked")
+    p.add_argument("--reason", help="required when moving to blocked; expected on any "
+                                    "move backward (flagged in the digest if missing)")
     p.add_argument("--force", action="store_true", help="close over open subtasks")
 
     p = leaf(issue, "delete", cmd_issue_delete)

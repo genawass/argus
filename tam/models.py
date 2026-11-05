@@ -20,6 +20,10 @@ STATUSES = (
     "cancelled",
 )
 CLOSED_STATUSES = ("done", "cancelled")
+
+# Reserved label: the work ran correctly and the hypothesis failed. That is a
+# result, not rework, so reports count it separately from issues that bounced.
+NEGATIVE_LABEL = "result/negative"
 OPEN_STATUSES = tuple(s for s in STATUSES if s not in CLOSED_STATUSES)
 
 PRIORITIES = ("p0", "p1", "p2", "p3")
